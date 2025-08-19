@@ -95,12 +95,12 @@ INSERT OR REPLACE INTO brawlers(id, name) VALUES (16000095, 'アリー');
 INSERT OR REPLACE INTO brawlers(id, name) VALUES (16000096, 'トランク');
 
 -- modes
-INSERT OR REPLACE INTO modes(id, name) VALUES (2, 'エメラルドハント');
-INSERT OR REPLACE INTO modes(id, name) VALUES (15, 'ホットゾーン');
-INSERT OR REPLACE INTO modes(id, name) VALUES (7, 'ブロストライカー');
-INSERT OR REPLACE INTO modes(id, name) VALUES (17, 'ノックアウト');
-INSERT OR REPLACE INTO modes(id, name) VALUES (1, '賞金稼ぎ');
-INSERT OR REPLACE INTO modes(id, name) VALUES (5, '強奪');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (2, 'gemGrab', 'エメラルドハント');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (15, 'hotZone', 'ホットゾーン');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (7, 'brawlBall', 'ブロストライカー');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (17, 'knockout', 'ノックアウト');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (1, 'bounty', '賞金稼ぎ');
+INSERT OR REPLACE INTO modes(id, name, name_ja) VALUES (5, 'heist', '強奪');
 
 -- maps
 INSERT OR REPLACE INTO maps(id, name, mode_id) VALUES (15000007, 'ごつごつ坑道', 2);

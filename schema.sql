@@ -8,12 +8,14 @@ CREATE TABLE IF NOT EXISTS players (
 CREATE TABLE IF NOT EXISTS modes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE
+    name_ja TEXT UNIQUE
 );
 
 -- maps linked to modes
 CREATE TABLE IF NOT EXISTS maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
+    name TEXT UNIQUE,
+    name_ja TEXT UNIQUE,
     mode_id INTEGER,
     UNIQUE(name, mode_id),
     FOREIGN KEY (mode_id) REFERENCES modes(id)
@@ -31,11 +33,9 @@ CREATE TABLE IF NOT EXISTS battle_logs (
     star_player_tag TEXT,
     mode_id INTEGER,
     map_id INTEGER,
-    star_player_brawler_id INTEGER,
-    winning_team INTEGER,
+    rank INTEGER,
     data TEXT,
     PRIMARY KEY (battle_time, star_player_tag),
     FOREIGN KEY (mode_id) REFERENCES modes(id),
     FOREIGN KEY (map_id) REFERENCES maps(id),
-    FOREIGN KEY (star_player_brawler_id) REFERENCES brawlers(id)
 );
