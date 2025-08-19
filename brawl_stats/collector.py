@@ -48,12 +48,13 @@ class BattleLogDB:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS battle_logs(
-                id TEXT PRIMARY KEY,
                 battle_time TEXT,
+                star_player_tag TEXT,
                 mode TEXT,
                 map TEXT,
                 winning_team INTEGER,
-                data TEXT
+                data TEXT,
+                PRIMARY KEY (battle_time, star_player_tag)
             )
             """
         )
@@ -77,17 +78,16 @@ class BattleLogDB:
         winning_team: Optional[int],
         data: dict,
     ) -> bool:
-        battle_id = f"{battle_time}_{normalize_tag(star_player_tag)}"
         cur = self.conn.cursor()
         try:
             cur.execute(
                 """
-                INSERT INTO battle_logs(id, battle_time, mode, map, winning_team, data)
+                INSERT INTO battle_logs(battle_time, star_player_tag, mode, map, winning_team, data)
                 VALUES(?,?,?,?,?,?)
                 """,
                 (
-                    battle_id,
                     battle_time,
+                    normalize_tag(star_player_tag),
                     mode,
                     map_name,
                     winning_team if winning_team is not None else -1,
