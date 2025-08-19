@@ -45,6 +45,7 @@ def sample_db() -> BattleLogDB:
         star_player_tag=sample["battle"]["starPlayer"]["tag"],
         mode=sample["event"]["mode"],
         map_name=sample["event"]["map"],
+        star_player_brawler=sample["battle"]["starPlayer"].get("brawler"),
         winning_team=0,
         data=sample,
     )

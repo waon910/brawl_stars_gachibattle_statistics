@@ -38,7 +38,14 @@ def analyze_usage_and_winrate(db: BattleLogDB) -> Tuple[Dict, Dict]:
         key: (mode, map, brawler_id, opponent_id) -> {'games': int, 'wins': int}
     """
     cur = db.conn.cursor()
-    cur.execute("SELECT mode, map, winning_team, data FROM battle_logs")
+    cur.execute(
+        """
+        SELECT modes.name, maps.name, battle_logs.winning_team, battle_logs.data
+        FROM battle_logs
+        JOIN modes ON battle_logs.mode_id = modes.id
+        JOIN maps ON battle_logs.map_id = maps.id
+        """
+    )
     stats: Dict[Tuple[str, str, str, int], Dict[str, int]] = {}
     matchups: Dict[Tuple[str, str, int, int], Dict[str, int]] = {}
     for mode, map_name, winning_team, data_json in cur.fetchall():

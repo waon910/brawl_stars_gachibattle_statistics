@@ -47,18 +47,79 @@ class BattleLogDB:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS modes(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS maps(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                mode_id INTEGER,
+                UNIQUE(name, mode_id),
+                FOREIGN KEY(mode_id) REFERENCES modes(id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brawlers(
+                id INTEGER PRIMARY KEY,
+                name TEXT UNIQUE
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS battle_logs(
                 battle_time TEXT,
                 star_player_tag TEXT,
-                mode TEXT,
-                map TEXT,
+                mode_id INTEGER,
+                map_id INTEGER,
+                star_player_brawler_id INTEGER,
                 winning_team INTEGER,
                 data TEXT,
-                PRIMARY KEY (battle_time, star_player_tag)
+                PRIMARY KEY (battle_time, star_player_tag),
+                FOREIGN KEY(mode_id) REFERENCES modes(id),
+                FOREIGN KEY(map_id) REFERENCES maps(id),
+                FOREIGN KEY(star_player_brawler_id) REFERENCES brawlers(id)
             )
             """
         )
         self.conn.commit()
+
+    def _get_or_create_mode(self, name: str) -> int:
+        cur = self.conn.cursor()
+        cur.execute("INSERT OR IGNORE INTO modes(name) VALUES(?)", (name,))
+        cur.execute("SELECT id FROM modes WHERE name=?", (name,))
+        return cur.fetchone()[0]
+
+    def _get_or_create_map(self, name: str, mode_id: int) -> int:
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT OR IGNORE INTO maps(name, mode_id) VALUES(?, ?)",
+            (name, mode_id),
+        )
+        cur.execute(
+            "SELECT id FROM maps WHERE name=? AND mode_id=?",
+            (name, mode_id),
+        )
+        return cur.fetchone()[0]
+
+    def _get_or_create_brawler(self, brawler: Optional[dict]) -> Optional[int]:
+        if not brawler:
+            return None
+        b_id = brawler.get("id")
+        name = brawler.get("name")
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT OR IGNORE INTO brawlers(id, name) VALUES(?, ?)",
+            (b_id, name),
+        )
+        return b_id
 
     def add_player(self, tag: str) -> None:
         tag = normalize_tag(tag)
@@ -75,21 +136,28 @@ class BattleLogDB:
         star_player_tag: str,
         mode: str,
         map_name: str,
+        star_player_brawler: Optional[dict],
         winning_team: Optional[int],
         data: dict,
     ) -> bool:
         cur = self.conn.cursor()
+        mode_id = self._get_or_create_mode(mode)
+        map_id = self._get_or_create_map(map_name, mode_id)
+        brawler_id = self._get_or_create_brawler(star_player_brawler)
         try:
             cur.execute(
                 """
-                INSERT INTO battle_logs(battle_time, star_player_tag, mode, map, winning_team, data)
-                VALUES(?,?,?,?,?,?)
+                INSERT INTO battle_logs(
+                    battle_time, star_player_tag, mode_id, map_id,
+                    star_player_brawler_id, winning_team, data
+                ) VALUES(?,?,?,?,?,?,?)
                 """,
                 (
                     battle_time,
                     normalize_tag(star_player_tag),
-                    mode,
-                    map_name,
+                    mode_id,
+                    map_id,
+                    brawler_id,
                     winning_team if winning_team is not None else -1,
                     json.dumps(data),
                 ),
@@ -152,6 +220,7 @@ class BattleLogCollector:
                 star_player.get("tag", ""),
                 event.get("mode", ""),
                 event.get("map", ""),
+                star_player.get("brawler"),
                 winning_team,
                 item,
             )
