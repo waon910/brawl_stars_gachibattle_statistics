@@ -1,7 +1,7 @@
 import json
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
-from .collector import BattleLogDB
+from .collector import BattleLogDB, BrawlStarsAPI, BattleLogCollector
 
 RANK_TIERS = [
     "Bronze",
@@ -25,6 +25,55 @@ def rank_from_trophies(trophies: int) -> Tuple[str, int]:
             return tier, grade
         index -= grades
     return "Unknown", 0
+
+
+def fetch_and_store_from_api(
+    db: BattleLogDB, player_tag: str, api_key: Optional[str] = None
+) -> int:
+    """公式 API からバトルログを取得しデータベースへ保存する。
+
+    Parameters
+    ----------
+    db: BattleLogDB
+        データを保存するデータベースインスタンス。
+    player_tag: str
+        バトルログを取得したいプレイヤーのタグ。
+    api_key: str, optional
+        Brawl Stars API の API キー。省略時は環境変数 ``BRAWL_STARS_API_KEY`` を使用。
+
+    Returns
+    -------
+    int
+        新規に保存されたバトルログ件数。
+    """
+    api = BrawlStarsAPI(api_key)
+    collector = BattleLogCollector(api, db)
+    items = api.fetch_battle_log(player_tag)
+    stored = 0
+    for item in items:
+        battle = item.get("battle", {})
+        event = item.get("event", {})
+        star_player = battle.get("starPlayer") or {}
+        winning_team = collector._winning_team_index(battle, player_tag)
+        added = db.add_battle(
+            item.get("battleTime"),
+            star_player.get("tag", ""),
+            event.get("mode", ""),
+            event.get("map", ""),
+            star_player.get("brawler"),
+            winning_team,
+            item,
+        )
+        if not added:
+            continue
+        stored += 1
+        for team in battle.get("teams", []):
+            for player in team:
+                tag = player.get("tag")
+                if tag:
+                    db.add_player(tag)
+    db.update_player_fetched(player_tag)
+    return stored
 
 
 def analyze_usage_and_winrate(db: BattleLogDB) -> Tuple[Dict, Dict]:
