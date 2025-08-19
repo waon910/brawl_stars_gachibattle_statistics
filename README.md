@@ -14,6 +14,17 @@ SQLite を用いたシンプルなスキーマです。`players` テーブルで
 テーブルでは `battle_time` と `star_player_tag` の複合キーでバトルを一意に識別します。`modes`、`maps`、`brawlers`
 といったテーブルを別途設け、モード・マップ・キャラクター情報を正規化しています。
 
+## マスターデータの挿入
+
+スキーマ作成後、`insert_master.sql` を実行するとモード・マップ・キャラクターのマスターデータを一括で登録できます。
+
+```bash
+# データベース初期化
+sqlite3 brawl_stats.db < schema.sql
+# マスターデータ挿入
+sqlite3 brawl_stats.db < insert_master.sql
+```
+
 テスト実行:
 
 ```bash
