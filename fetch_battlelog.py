@@ -6,6 +6,7 @@ from urllib.parse import quote
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
+import sqlite3
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
@@ -64,6 +65,13 @@ def main():
         return
     print("バトルログの詳細:")
 
+    conn = sqlite3.connect("brawl_stats.db")
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT OR REPLACE INTO players(tag, last_fetched) VALUES (?, CURRENT_TIMESTAMP)",
+        (player_tag,),
+    )
+
     rank_id = ""
     for battle in battle_logs:
         rank=0
@@ -109,7 +117,66 @@ def main():
 
         print(f"ランク: {rank} 結果：{resultInfo}")
 
+        map_id = battle.get("event", {}).get("id")
+        if map_id is None or not rank_id:
+            print("マップIDまたはrank_idが不明のためスキップ")
+            continue
+
+        cur.execute(
+            "SELECT id, count FROM rank_logs WHERE map_id=? AND rank_id=?",
+            (map_id, rank),
+        )
+        row = cur.fetchone()
+        if row:
+            rank_log_id = row[0]
+            cur.execute("UPDATE rank_logs SET count = count + 1 WHERE id=?", (rank_log_id,))
+        else:
+            cur.execute(
+                "INSERT INTO rank_logs(map_id, rank_id, count) VALUES (?, ?, 1)",
+                (map_id, rank),
+            )
+            rank_log_id = cur.lastrowid
+
+        try:
+            cur.execute(
+                "INSERT INTO battle_logs(id, rank_log_id) VALUES (?, ?)",
+                (rank_id, rank_log_id),
+            )
+        except sqlite3.IntegrityError:
+            print("既に保存済みのバトルのためスキップ")
+            continue
+
+        for rlog in resultInfo:
+            for brawler_id in rlog.brawlers:
+                cur.execute(
+                    "SELECT count FROM brawler_used_ranks WHERE brawler_id=? AND rank_log_id=?",
+                    (brawler_id, rank_log_id),
+                )
+                if cur.fetchone():
+                    cur.execute(
+                        "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=? AND rank_log_id=?",
+                        (brawler_id, rank_log_id),
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO brawler_used_ranks(brawler_id, rank_log_id, count) VALUES (?, ?, 1)",
+                        (brawler_id, rank_log_id),
+                    )
+
+        winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
+        losers = [b for r in resultInfo if r.result == "defeat" for b in r.brawlers]
+        for w in winners:
+            for l in losers:
+                cur.execute(
+                    "INSERT OR IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (?, ?, ?)",
+                    (w, l, rank_id),
+                )
+
+        conn.commit()
+
     print("バトルログの取得が完了しました。")
+
+    conn.close()
             
 
 
