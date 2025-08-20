@@ -33,24 +33,25 @@ CREATE TABLE IF NOT EXISTS _brawlers (
     name_ja TEXT UNIQUE
 );
 
--- rank_logs table
-CREATE TABLE IF NOT EXISTS rank_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+-- brawler_used_rank_logs table
+CREATE TABLE IF NOT EXISTS brawler_used_ranks (
+    brawler_id INTEGER NOT NULL,
     map_id INTEGER NOT NULL,
     rank_id INTEGER NOT NULL,
     count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (brawler_id, map_id, rank_id),
+    FOREIGN KEY (brawler_id) REFERENCES brawlers(id),
     FOREIGN KEY (map_id) REFERENCES maps(id),
     FOREIGN KEY (rank_id) REFERENCES ranks(id)
 );
 
--- brawler_used_rank_logs table
-CREATE TABLE IF NOT EXISTS brawler_used_ranks (
-    brawler_id INTEGER NOT NULL,
-    rank_log_id INTEGER NOT NULL,
-    count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (brawler_id, rank_log_id),
-    FOREIGN KEY (brawler_id) REFERENCES brawlers(id),
-    FOREIGN KEY (rank_log_id) REFERENCES rank_logs(id)
+-- rank_logs table
+CREATE TABLE IF NOT EXISTS rank_logs (
+    id TEXT PRIMARY KEY,
+    map_id INTEGER NOT NULL,
+    rank_id INTEGER NOT NULL,
+    FOREIGN KEY (map_id) REFERENCES maps(id),
+    FOREIGN KEY (rank_id) REFERENCES ranks(id)
 );
 
 -- battle_logs table
