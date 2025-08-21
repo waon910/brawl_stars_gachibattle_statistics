@@ -43,7 +43,7 @@ def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Opti
             print(f"リクエストに失敗しました({attempt}/{MAX_RETRIES}): {e}. {wait}秒後に再試行します。")
             time.sleep(wait)
 
-def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -> set[str]:
+def fetch_battle_logs(player_tag: str, api_key: str, cur: sqlite3.Cursor) -> set[str]:
     """指定したプレイヤーのバトルログを取得してDBへ保存し、発見したプレイヤータグを返す"""
 
     tag_enc = quote(player_tag, safe="")
@@ -69,7 +69,6 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         print("バトルログが見つかりませんでした。")
         return set()
 
-    cur = conn.cursor()
     cur.execute(
         "INSERT OR REPLACE INTO players(tag, last_fetched) VALUES (?, CURRENT_TIMESTAMP)",
         (player_tag,),
@@ -188,8 +187,6 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
                     (w, l, battle_log_id),
                 )
 
-        conn.commit()
-
     discovered_tags.discard(player_tag)
     return discovered_tags
             
@@ -221,7 +218,7 @@ def main() -> None:
                 print("対象プレイヤーがいません")
                 break
 
-            fetch_battle_logs(current_tag, api_key, conn)
+            fetch_battle_logs(current_tag, api_key, cur)
 
             rest = cur.execute(
                 "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
@@ -230,6 +227,8 @@ def main() -> None:
             if rest == 0:
                 break
             print(f"残り集計対象プレイヤー数:{rest}")
+            conn.commit()
+            conn.close()
 
     finally:
         cur = conn.cursor()
