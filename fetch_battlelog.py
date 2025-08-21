@@ -45,7 +45,7 @@ def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Opti
             print(f"リクエストに失敗しました({attempt}/{MAX_RETRIES}): {e}. {wait}秒後に再試行します。")
             time.sleep(wait)
 
-def fetch_battle_logs(player_tag: str, api_key: str, cur: sqlite3.Cursor) -> set[str]:
+def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -> set[str]:
     """指定したプレイヤーのバトルログを取得してDBへ保存し、発見したプレイヤータグを返す"""
 
     tag_enc = quote(player_tag, safe="")
@@ -70,125 +70,129 @@ def fetch_battle_logs(player_tag: str, api_key: str, cur: sqlite3.Cursor) -> set
     if len(battle_logs) < 1:
         print("バトルログが見つかりませんでした。")
         return set()
+    
+    with conn.cursor() as cur:
 
-    cur.execute(
-        "INSERT OR REPLACE INTO players(tag, last_fetched) VALUES (?, CURRENT_TIMESTAMP)",
-        (player_tag,),
-    )
+        cur.execute(
+            "INSERT OR REPLACE INTO players(tag, last_fetched) VALUES (?, CURRENT_TIMESTAMP)",
+            (player_tag,),
+        )
 
-    discovered_tags: set[str] = set()
+        discovered_tags: set[str] = set()
 
-    rank=0
-    new_rank_flag = False            
-    new_rank_brawlers_flag = False   
-    rank_log_id = None   
+        rank=0
+        new_rank_flag = False            
+        new_rank_brawlers_flag = False   
+        rank_log_id = None   
 
-    for battle in battle_logs:       
-        battle_detail = battle.get("battle", {})
-        if battle_detail.get("type") not in ["soloRanked"]:
-            continue
-        battle_map = battle.get("event", {}).get("map", "不明")
-        battle_time = battle.get("battleTime", "不明")
-        if battle_time < COL_START_DATE:
-            continue
-        star_player = battle_detail.get("starPlayer") or {}
-        star_tag = star_player.get("tag")
-        if star_tag:
-            new_rank_flag = True
-            rank_log_id = f"{battle_time}_{star_tag}"
-            # ここですでに存在しているランクマッチを確認
-            cur.execute(
-                "SELECT id FROM rank_logs WHERE id=?",
-                (rank_log_id,),
-            )
-            row = cur.fetchone()
-            if row:
-                # print(f"既に記録済みのランクマッチ: {rank_log_id}")
-                new_rank_flag = False
+        for battle in battle_logs:       
+            battle_detail = battle.get("battle", {})
+            if battle_detail.get("type") not in ["soloRanked"]:
                 continue
-            else:
-                new_rank_brawlers_flag = True
-        elif not new_rank_flag:
-            continue
-            
-        result = battle_detail.get("result", "不明")
-        teams = battle_detail.get("teams", [])
-        resultInfo: list[ResultLog] = []
+            battle_map = battle.get("event", {}).get("map", "不明")
+            battle_time = battle.get("battleTime", "不明")
+            if battle_time < COL_START_DATE:
+                continue
+            star_player = battle_detail.get("starPlayer") or {}
+            star_tag = star_player.get("tag")
+            if star_tag:
+                new_rank_flag = True
+                rank_log_id = f"{battle_time}_{star_tag}"
+                # ここですでに存在しているランクマッチを確認
+                cur.execute(
+                    "SELECT id FROM rank_logs WHERE id=?",
+                    (rank_log_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    # print(f"既に記録済みのランクマッチ: {rank_log_id}")
+                    new_rank_flag = False
+                    continue
+                else:
+                    new_rank_brawlers_flag = True
+            elif not new_rank_flag:
+                continue
+                
+            result = battle_detail.get("result", "不明")
+            teams = battle_detail.get("teams", [])
+            resultInfo: list[ResultLog] = []
 
-        my_side_idx = None  # 自分がいるチーム(0/1)
+            my_side_idx = None  # 自分がいるチーム(0/1)
 
-        for side_idx,team in enumerate(teams):
-            resultLog = ResultLog()
-            for player in team:
-                resultLog.brawlers.append(player.get("brawler", {}).get("id", "不明"))
-                p_tag = player.get("tag")
-                if p_tag:
-                    discovered_tags.add(p_tag)
-                    cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
-                if p_tag == player_tag:
-                    my_side_idx = side_idx
-                    resultLog.result = result
-                trophies = player.get("brawler", {}).get("trophies", 0)
-                if rank < trophies <= 22:
-                    rank = trophies
-            resultInfo.append(resultLog)
+            for side_idx,team in enumerate(teams):
+                resultLog = ResultLog()
+                for player in team:
+                    resultLog.brawlers.append(player.get("brawler", {}).get("id", "不明"))
+                    p_tag = player.get("tag")
+                    if p_tag:
+                        discovered_tags.add(p_tag)
+                        cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
+                    if p_tag == player_tag:
+                        my_side_idx = side_idx
+                        resultLog.result = result
+                    trophies = player.get("brawler", {}).get("trophies", 0)
+                    if rank < trophies <= 22:
+                        rank = trophies
+                resultInfo.append(resultLog)
 
-        if my_side_idx is not None and len(resultInfo) == 2 and result in OPPOSITE:
-            other = 1 - my_side_idx
-            # まだ埋まっていない場合のみ上書き
-            if getattr(resultInfo[other], "result", "不明") in (None, "", "不明"):
-                resultInfo[other].result = OPPOSITE[result]
+            if my_side_idx is not None and len(resultInfo) == 2 and result in OPPOSITE:
+                other = 1 - my_side_idx
+                # まだ埋まっていない場合のみ上書き
+                if getattr(resultInfo[other], "result", "不明") in (None, "", "不明"):
+                    resultInfo[other].result = OPPOSITE[result]
 
-        if new_rank_brawlers_flag:
-            #新規ランクマッチ登録
+            if new_rank_brawlers_flag:
+                #新規ランクマッチ登録
+                try:
+                    cur.execute(
+                        "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (?, ?, ?)",
+                        (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                    )
+                except sqlite3.IntegrityError:
+                    print(f"修正が必要 マップ：{battle_map} ランク：{rank}")
+                    print(battle)
+                    SystemError
+                for rlog in resultInfo:
+                    for brawler_id in rlog.brawlers:
+                        cur.execute(
+                            "SELECT count FROM brawler_used_ranks WHERE brawler_id=? AND map_id=? AND rank_id=?",
+                            (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                        )
+                        if cur.fetchone():
+                            cur.execute(
+                                "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=? AND map_id=? AND rank_id=?",
+                                (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                            )
+                        else:
+                            cur.execute(
+                                "INSERT INTO brawler_used_ranks(brawler_id, map_id, rank_id, count) VALUES (?, ?, ?, 1)",
+                                (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                            )
+                new_rank_brawlers_flag = False
+
+            #新規バトル登録
+            battle_log_id = f"{battle_time}_{p_tag}_battle"
             try:
                 cur.execute(
-                    "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (?, ?, ?)",
-                    (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                    "INSERT INTO battle_logs(id, rank_log_id) VALUES (?, ?)",
+                    (battle_log_id, rank_log_id),
                 )
             except sqlite3.IntegrityError:
-                print(f"修正が必要 マップ：{battle_map} ランク：{rank}")
-                print(battle)
-                SystemError
-            for rlog in resultInfo:
-                for brawler_id in rlog.brawlers:
+                print("既に記録済みのバトルのためスキップ")
+                print(f"バトルログID：{battle_log_id}　ランクログID：{rank_log_id}")
+                continue
+
+            winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
+            losers = [b for r in resultInfo if r.result == "defeat" for b in r.brawlers]
+            for w in winners:
+                for l in losers:
                     cur.execute(
-                        "SELECT count FROM brawler_used_ranks WHERE brawler_id=? AND map_id=? AND rank_id=?",
-                        (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
+                        "INSERT OR IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (?, ?, ?)",
+                        (w, l, battle_log_id),
                     )
-                    if cur.fetchone():
-                        cur.execute(
-                            "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=? AND map_id=? AND rank_id=?",
-                            (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
-                        )
-                    else:
-                        cur.execute(
-                            "INSERT INTO brawler_used_ranks(brawler_id, map_id, rank_id, count) VALUES (?, ?, ?, 1)",
-                            (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
-                        )
-            new_rank_brawlers_flag = False
 
-        #新規バトル登録
-        battle_log_id = f"{battle_time}_{p_tag}_battle"
-        try:
-            cur.execute(
-                "INSERT INTO battle_logs(id, rank_log_id) VALUES (?, ?)",
-                (battle_log_id, rank_log_id),
-            )
-        except sqlite3.IntegrityError:
-            print("既に記録済みのバトルのためスキップ")
-            print(f"バトルログID：{battle_log_id}　ランクログID：{rank_log_id}")
-            continue
-
-        winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
-        losers = [b for r in resultInfo if r.result == "defeat" for b in r.brawlers]
-        for w in winners:
-            for l in losers:
-                cur.execute(
-                    "INSERT OR IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (?, ?, ?)",
-                    (w, l, battle_log_id),
-                )
-
+        conn.commit()
+        
     discovered_tags.discard(player_tag)
     return discovered_tags
             
@@ -220,7 +224,7 @@ def main() -> None:
                 print("対象プレイヤーがいません")
                 break
 
-            fetch_battle_logs(current_tag, api_key, cur)
+            fetch_battle_logs(current_tag, api_key, conn)
 
             rest = cur.execute(
                 "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
@@ -229,7 +233,7 @@ def main() -> None:
             if rest == 0:
                 break
             print(f"残り集計対象プレイヤー数:{rest}")
-            conn.commit()
+            
             conn.close()
 
     finally:
