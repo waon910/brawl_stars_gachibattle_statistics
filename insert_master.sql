@@ -109,7 +109,6 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000009, 'Deat
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000010, 'Gem Fort', 'エメラルドの要塞', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000011, 'Undermine', 'アンダーマイン', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000115, 'Double Swoosh', 'ダブルレール', 2);
-INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000636, 'Last Stop', 'ラストストップ', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000292, 'Open Business', 'オープンビジネス', 15);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000293, 'Parallel Plays', 'パラレルワールド', 15);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000300, 'Ring of Fire', '炎のリング', 15);

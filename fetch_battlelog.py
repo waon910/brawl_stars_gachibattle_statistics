@@ -88,6 +88,8 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
             continue
         battle_map = battle.get("event", {}).get("map", "不明")
         battle_time = battle.get("battleTime", "不明")
+        if battle_time < "20250703":
+            continue
         star_player = battle_detail.get("starPlayer") or {}
         star_tag = star_player.get("tag")
         if star_tag:
