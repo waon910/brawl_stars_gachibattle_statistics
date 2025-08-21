@@ -10,7 +10,7 @@ import sqlite3
 from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
 import time
-import threading
+from datetime import datetime, timedelta
 from typing import Optional
 
 # リクエスト間隔（秒）
@@ -196,34 +196,44 @@ def main() -> None:
     load_dotenv()
 
     api_key = os.getenv("BRAWL_STARS_API_KEY")
-    seed_tag = os.getenv("PLAYER_TAG")
     if not api_key:
         raise RuntimeError("環境変数 BRAWL_STARS_API_KEY が設定されていません。")
-    if not seed_tag:
-        raise RuntimeError("PLAYER_TAG を .env に設定してください。")
 
     conn = sqlite3.connect("brawl_stats.db")
 
     start_time = time.time()
 
     try:
-        to_fetch = {seed_tag}
-        fetched: set[str] = set()
-        # current = to_fetch.pop()
-        # new_tags = fetch_battle_logs(current, api_key, conn)
-        while to_fetch:
-            current = to_fetch.pop()
-            if current in fetched:
-                continue
-            new_tags = fetch_battle_logs(current, api_key, conn)
-            fetched.add(current)
-            to_fetch.update(new_tags - fetched)
-            print(f"集計対象プレイヤー数：{len(to_fetch)}")
+        while 1:
+            cur = conn.cursor()
+            # 72時間前の時刻を計算
+            seventy_two_hours_ago = datetime.now() - timedelta(hours=72)
+            
+            # 正しいSQL文（72時間以内に取得されていないプレイヤーを1件取得）
+            current_tag = cur.execute(
+                "SELECT tag FROM players WHERE last_fetched < ? ORDER BY last_fetched ASC LIMIT 1",
+                (seventy_two_hours_ago,)
+            ).fetchone()[0]
+            
+            if not current_tag:
+                print("対象プレイヤーがいません")
+                break
+
+            fetch_battle_logs(current_tag, api_key, conn)
+
+            rest = cur.execute(
+                "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
+                (seventy_two_hours_ago,)
+            ).fetchone()[0]
+            if rest == 0:
+                break
+            print(f"残り集計対象プレイヤー数:{rest}")
+
     finally:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM players")
         players = cur.fetchone()[0]
-        print(f"集計プレイヤー:{players-to_fetch}")
+        print(f"集計プレイヤー:{players-rest}")
         print(f"プレイヤー総数:{players}")
 
         cur.execute("SELECT COUNT(*) FROM rank_logs")

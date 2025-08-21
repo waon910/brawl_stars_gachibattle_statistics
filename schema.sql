@@ -1,7 +1,7 @@
 -- players table
 CREATE TABLE IF NOT EXISTS players (
     tag TEXT PRIMARY KEY,
-    last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
+    last_fetched DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00'
 );
 
 -- game modes table
