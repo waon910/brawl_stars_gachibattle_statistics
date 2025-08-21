@@ -109,6 +109,7 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000009, 'Deat
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000010, 'Gem Fort', 'エメラルドの要塞', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000011, 'Undermine', 'アンダーマイン', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000115, 'Double Swoosh', 'ダブルレール', 2);
+INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000636, 'Last Stop', 'ラストストップ', 2);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000292, 'Open Business', 'オープンビジネス', 15);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000293, 'Parallel Plays', 'パラレルワールド', 15);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000300, 'Ring of Fire', '炎のリング', 15);
@@ -121,6 +122,8 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000368, 'Bell
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000440, 'Flaring Phoenix', '燃える不死鳥', 17);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000548, 'Out In The Open', 'オープンフィールド', 17);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000703, 'New Horizon', '新たなる地平', 17);
+INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000502, 'Flowing Springs', '淀みなき泉', 17);
+INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000367, 'Goldarm Gulch', 'ゴールドアームの渓谷', 17);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000005, 'Shooting Star', '流れ星', 1);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000022, 'Hideout', '隠れ家', 1);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000082, 'Layer Cake', 'ミルフィーユ', 1);
@@ -129,6 +132,7 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000785, 'Kabo
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000019, 'Safe Zone', '安全地帯', 5);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000053, 'Hot Potato', 'ホットポテト', 5);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000072, 'Bridge Too Far', '橋の彼方', 5);
+
 
 -- ranks
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (0, 'Unknown', '不明');
@@ -140,3 +144,6 @@ INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (5, 'Mythic', 'エリー
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (6, 'Legendary', 'レジェンド');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (7, 'Masters', 'マスター');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (8, 'Pro', 'プロ');
+
+-- players
+INSERT OR REPLACE INTO players(tag, last_fetched) VALUES ("#PQLOJ9RQG", '2000-01-01 00:00:00');
