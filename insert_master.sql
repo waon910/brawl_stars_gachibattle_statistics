@@ -131,6 +131,7 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000053, 'Hot 
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000072, 'Bridge Too Far', '橋の彼方', 5);
 
 -- ranks
+INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (0, 'Unknown', '不明');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (1, 'Bronze', 'ブロンズ');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (2, 'Silver', 'シルバー');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (3, 'Gold', 'ゴールド');

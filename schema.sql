@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS rank_logs (
 -- battle_logs table
 CREATE TABLE IF NOT EXISTS battle_logs (
     id TEXT PRIMARY KEY, -- battleTime+starPlayer.tag
-    rank_log_id INTEGER NOT NULL,
+    rank_log_id TEXT NOT NULL,
     FOREIGN KEY (rank_log_id) REFERENCES rank_logs(id)
 );
 
