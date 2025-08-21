@@ -28,5 +28,4 @@ MAP_NAME_TO_ID: dict[str, int] = {
     "Bridge Too Far": 15000072,
     "Flowing Springs": 15000502,
     "Goldarm Gulch": 15000367,
-    "Last Stop":15000636,
 }
