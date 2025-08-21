@@ -11,6 +11,12 @@ from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
 import time
 import threading
+from typing import Optional
+
+# リクエスト間隔（秒）
+REQUEST_INTERVAL = 1
+# 最大リトライ回数
+MAX_RETRIES = 3
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
@@ -19,6 +25,23 @@ OPPOSITE = {"victory": "defeat", "defeat": "victory"}
 class ResultLog:
     result: str = "不明"
     brawlers: list[str] = field(default_factory=list)
+
+
+def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Optional[requests.Response]:
+    """APIにリクエストを送り、失敗した場合はリトライを行う"""
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            time.sleep(REQUEST_INTERVAL)
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as e:
+            if attempt == MAX_RETRIES:
+                print(f"リクエストに失敗しました: {e}")
+                return None
+            wait = REQUEST_INTERVAL * attempt
+            print(f"リクエストに失敗しました({attempt}/{MAX_RETRIES}): {e}. {wait}秒後に再試行します。")
+            time.sleep(wait)
 
 def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -> set[str]:
     """指定したプレイヤーのバトルログを取得してDBへ保存し、発見したプレイヤータグを返す"""
@@ -31,24 +54,20 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         "Accept": "application/json",
     }
 
-    # print(f"GET {url}")
-    time.sleep(1)  # 1秒待機
-    resp = requests.get(url, headers=headers, timeout=15)
+    resp = get_with_retry(url, headers)
+    if resp is None:
+        return set()
 
-    # エラーハンドリング（内容も表示）
     try:
-        resp.raise_for_status()
-    except requests.HTTPError:
-        print(f"HTTP {resp.status_code}")
-        print(resp.text)
-        raise
-
-    data = resp.json()
+        data = resp.json()
+    except json.JSONDecodeError as e:
+        print(f"JSONの解析に失敗しました: {e}")
+        return set()
 
     battle_logs = data.get("items", [])
-    if len(battle_logs) < 1 :
+    if len(battle_logs) < 1:
         print("バトルログが見つかりませんでした。")
-        return
+        return set()
 
     cur = conn.cursor()
     cur.execute(
