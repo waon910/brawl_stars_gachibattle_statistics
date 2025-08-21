@@ -17,6 +17,8 @@ from typing import Optional
 REQUEST_INTERVAL = 1
 # 最大リトライ回数
 MAX_RETRIES = 3
+# 集計開始日
+COL_START_DATE = "20250703"
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
@@ -87,7 +89,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, cur: sqlite3.Cursor) -> set
             continue
         battle_map = battle.get("event", {}).get("map", "不明")
         battle_time = battle.get("battleTime", "不明")
-        if battle_time < "20250703":
+        if battle_time < COL_START_DATE:
             continue
         star_player = battle_detail.get("starPlayer") or {}
         star_tag = star_player.get("tag")
