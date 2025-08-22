@@ -25,4 +25,4 @@ pip install streamlit pandas streamlit-autorefresh
 streamlit run dashboard.py
 ```
 
-モード・マップ・ランクを選択すると、キャラ使用率・勝率および対キャラ勝率を視覚的に確認できます。
+シーズン → モード → マップ → ランクを選択すると、キャラ使用率・勝率および対キャラ勝率を視覚的に確認できます。シーズンは毎月第1木曜日を開始日として計算されます。
