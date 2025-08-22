@@ -14,6 +14,8 @@ MAP_NAME_TO_ID: dict[str, int] = {
     "Sneaky Fields": 15000050,
     "Pinball Dreams": 15000118,
     "Center Stage": 15000132,
+    "Backyard Bowl": 15000024,
+    "Pinhole Punt": 15000026,
     "Belle's Rock": 15000368,
     "Flaring Phoenix": 15000440,
     "Out in the Open": 15000548,

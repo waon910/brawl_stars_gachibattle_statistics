@@ -117,6 +117,8 @@ INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000693, 'Trip
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000050, 'Sneaky Fields', '静かな広場', 7);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000118, 'Pinball Dreams', 'ピンボールドリーム', 7);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000132, 'Center Stage', '中央コード', 7);
+INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000024, 'Backyard Bowl', '鉄壁の護り', 7);
+INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000026, 'Pinhole Punt', '狭き門', 7);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000368, 'Belles Rock', 'ベルの岩', 17);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000440, 'Flaring Phoenix', '燃える不死鳥', 17);
 INSERT OR REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000548, 'Out In The Open', 'オープンフィールド', 17);
@@ -143,6 +145,3 @@ INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (5, 'Mythic', 'エリー
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (6, 'Legendary', 'レジェンド');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (7, 'Masters', 'マスター');
 INSERT OR REPLACE INTO _ranks(id, name, name_ja) VALUES (8, 'Pro', 'プロ');
-
--- players
-INSERT OR REPLACE INTO players(tag, last_fetched) VALUES ("#PQLOJ9RQG", '2000-01-01 00:00:00');
