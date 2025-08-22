@@ -116,15 +116,15 @@ def main():
     conn = get_connection()
     modes = load_modes(conn)
     mode_name = st.selectbox("モード", modes["name_ja"])
-    mode_id = modes[modes["name_ja"] == mode_name]["id"].iloc[0]
+    mode_id = int(modes[modes["name_ja"] == mode_name]["id"].iloc[0])
 
     maps = load_maps(conn, mode_id)
     map_name = st.selectbox("マップ", maps["name_ja"])
-    map_id = maps[maps["name_ja"] == map_name]["id"].iloc[0]
+    map_id = int(maps[maps["name_ja"] == map_name]["id"].iloc[0])
 
     ranks = load_ranks(conn)
     rank_name = st.selectbox("ランク", ranks["name_ja"])
-    rank_id = ranks[ranks["name_ja"] == rank_name]["id"].iloc[0]
+    rank_id = int(ranks[ranks["name_ja"] == rank_name]["id"].iloc[0])
 
     st.header("キャラ使用率")
     usage_df = brawler_usage(conn, map_id, rank_id)
