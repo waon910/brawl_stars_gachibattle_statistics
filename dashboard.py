@@ -205,16 +205,26 @@ def battle_counts(season_id=None, mode_id=None, map_id=None, rank_id=None):
 
     return {"all": overall, "mode": mode, "map": map_total, "rank": rank_total}
 
-def matchup_rates(map_id, brawler_id, season_id=None):
+def matchup_rates(brawler_id, season_id=None, mode_id=None, map_id=None, rank_id=None):
+    """指定した階層での対キャラ勝率を集計する"""
     with sqlite3.connect(DB_PATH) as conn:
         query = (
             "SELECT w.win_brawler_id, w.lose_brawler_id, COUNT(*) AS cnt "
             "FROM win_lose_logs w "
             "JOIN battle_logs bl ON w.battle_log_id = bl.id "
             "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
-            "WHERE rl.map_id=?"
+            "JOIN _maps m ON rl.map_id = m.id WHERE 1=1"
         )
-        params: list = [map_id]
+        params: list = []
+        if map_id is not None:
+            query += " AND rl.map_id=?"
+            params.append(map_id)
+        if mode_id is not None:
+            query += " AND m.mode_id=?"
+            params.append(mode_id)
+        if rank_id is not None:
+            query += " AND rl.rank_id=?"
+            params.append(rank_id)
         if season_id is not None:
             start, next_start = season_range(season_id)
             query += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
@@ -242,8 +252,6 @@ def matchup_rates(map_id, brawler_id, season_id=None):
     return merged[["opponent", "wins", "losses", "win_rate"]].sort_values(
         "win_rate", ascending=False
     )
-
-
 def main():
     st.title("Brawl Stars 統計ダッシュボード")
     st.caption("データベースをリアルタイムで監視")
@@ -307,14 +315,17 @@ def main():
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
     brawler_name = st.selectbox("キャラ", brawlers["name_ja"])
     brawler_id = int(brawlers[brawlers["name_ja"] == brawler_name]["id"].iloc[0])
-    if map_id is not None:
-        match_df = matchup_rates(map_id, brawler_id, season_id)
-        if not match_df.empty:
-            st.dataframe(match_df)
-        else:
-            st.write("データがありません")
+    match_df = matchup_rates(
+        brawler_id,
+        season_id=season_id,
+        mode_id=mode_id,
+        map_id=map_id,
+        rank_id=rank_id,
+    )
+    if not match_df.empty:
+        st.dataframe(match_df)
     else:
-        st.write("マップを選択すると対キャラ勝率を表示します")
+        st.write("データがありません")
 
 if __name__ == "__main__":
     main()
