@@ -19,7 +19,11 @@ def load_modes():
 
 def load_maps(mode_id):
     with sqlite3.connect(DB_PATH) as conn:
-        return pd.read_sql_query("SELECT id, name_ja FROM _maps WHERE mode_id=? ORDER BY id", conn, params=(mode_id,))
+        return pd.read_sql_query(
+            "SELECT id, name_ja FROM _maps WHERE mode_id=? ORDER BY id",
+            conn,
+            params=(mode_id,),
+        )
 
 def load_ranks():
     with sqlite3.connect(DB_PATH) as conn:
@@ -95,12 +99,15 @@ def battle_counts(mode_id, map_id=None, rank_id=None):
     """各階層での対戦数を取得する"""
     with sqlite3.connect(DB_PATH) as conn:
         overall = conn.execute("SELECT COUNT(*) FROM battle_logs").fetchone()[0]
-        mode = conn.execute(
-            "SELECT COUNT(*) FROM battle_logs bl "
-            "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
-            "JOIN _maps m ON rl.map_id = m.id WHERE m.mode_id=?",
-            (mode_id,),
-        ).fetchone()[0]
+        if mode_id is not None:
+            mode = conn.execute(
+                "SELECT COUNT(*) FROM battle_logs bl "
+                "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
+                "JOIN _maps m ON rl.map_id = m.id WHERE m.mode_id=?",
+                (mode_id,),
+            ).fetchone()[0]
+        else:
+            mode = overall
         if map_id is not None:
             map_total = conn.execute(
                 "SELECT COUNT(*) FROM battle_logs bl "
@@ -115,6 +122,12 @@ def battle_counts(mode_id, map_id=None, rank_id=None):
                 "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
                 "WHERE rl.map_id=? AND rl.rank_id=?",
                 (map_id, rank_id),
+            ).fetchone()[0]
+        elif map_id is None and rank_id is not None:
+            rank_total = conn.execute(
+                "SELECT COUNT(*) FROM battle_logs bl "
+                "JOIN rank_logs rl ON bl.rank_log_id = rl.id WHERE rl.rank_id=?",
+                (rank_id,),
             ).fetchone()[0]
         else:
             rank_total = map_total
@@ -165,10 +178,15 @@ def main():
 
     # conn = get_connection()
     modes = load_modes()
-    mode_name = st.selectbox("モード", modes["name_ja"])
-    mode_id = int(modes[modes["name_ja"] == mode_name]["id"].iloc[0])
+    mode_options = ["全体"] + modes["name_ja"].tolist()
+    mode_name = st.selectbox("モード", mode_options)
+    if mode_name == "全体":
+        mode_id = None
+        maps = pd.DataFrame(columns=["id", "name_ja"])
+    else:
+        mode_id = int(modes[modes["name_ja"] == mode_name]["id"].iloc[0])
+        maps = load_maps(mode_id)
 
-    maps = load_maps(mode_id)
     map_options = ["全体"] + maps["name_ja"].tolist()
     map_name = st.selectbox("マップ", map_options)
     if map_name == "全体":
