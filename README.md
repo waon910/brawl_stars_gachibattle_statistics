@@ -12,3 +12,17 @@ sqlite3 brawl_stats.db < schema.sql
 # マスターデータ挿入
 sqlite3 brawl_stats.db < insert_master.sql
 ```
+
+## GUIダッシュボード
+
+`streamlit` を用いてデータベースの統計情報をリアルタイムに表示するダッシュボードを提供します。
+
+```bash
+# 依存パッケージのインストール
+pip install streamlit pandas streamlit-autorefresh
+
+# ダッシュボードの起動
+streamlit run dashboard.py
+```
+
+モード・マップ・ランクを選択すると、キャラ使用率・勝率および対キャラ勝率を視覚的に確認できます。
