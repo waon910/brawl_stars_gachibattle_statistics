@@ -29,30 +29,39 @@ def beta_lcb(alpha: float, beta: float, confidence: float = 0.95) -> float:
 def fetch_stats(conn: sqlite3.Connection, since: str) -> List[tuple]:
     cur = conn.cursor()
     sql = """
-    WITH pair_counts AS (
-        SELECT battle_log_id,
-               COUNT(DISTINCT win_brawler_id) AS win_cnt,
-               COUNT(DISTINCT lose_brawler_id) AS lose_cnt
-        FROM win_lose_logs
-        GROUP BY battle_log_id
-    ), recent_battles AS (
-        SELECT bl.id AS battle_log_id, rl.map_id, substr(rl.id,1,8) AS battle_date
+    WITH recent_battles AS (
+        SELECT bl.id AS battle_log_id, rl.map_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
         WHERE rl.rank_id >= 4 AND substr(rl.id,1,8) >= ?
+    ), pair_counts AS (
+        SELECT wl.battle_log_id,
+               COUNT(DISTINCT wl.win_brawler_id) AS win_cnt,
+               COUNT(DISTINCT wl.lose_brawler_id) AS lose_cnt
+        FROM win_lose_logs wl
+        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
+        GROUP BY wl.battle_log_id
+    ), win_results AS (
+        SELECT rb.map_id, wl.win_brawler_id AS brawler_id,
+               SUM(1.0 / pc.lose_cnt) AS wins, 0.0 AS losses
+        FROM win_lose_logs wl
+        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
+        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
+        GROUP BY rb.map_id, wl.win_brawler_id
+    ), lose_results AS (
+        SELECT rb.map_id, wl.lose_brawler_id AS brawler_id,
+               0.0 AS wins, SUM(1.0 / pc.win_cnt) AS losses
+        FROM win_lose_logs wl
+        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
+        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
+        GROUP BY rb.map_id, wl.lose_brawler_id
     ), weighted_results AS (
-        SELECT rb.map_id, wl.win_brawler_id AS brawler_id, 1.0/pc.lose_cnt AS win, 0.0 AS loss
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
+        SELECT * FROM win_results
         UNION ALL
-        SELECT rb.map_id, wl.lose_brawler_id AS brawler_id, 0.0 AS win, 1.0/pc.win_cnt AS loss
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
+        SELECT * FROM lose_results
     )
     SELECT m.name_ja AS map_name, b.name_ja AS brawler_name,
-           SUM(win) AS wins, SUM(loss) AS losses
+           SUM(wr.wins) AS wins, SUM(wr.losses) AS losses
     FROM weighted_results wr
     JOIN _maps m ON m.id = wr.map_id
     JOIN _brawlers b ON b.id = wr.brawler_id

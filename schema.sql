@@ -71,3 +71,8 @@ CREATE TABLE IF NOT EXISTS win_lose_logs (
     FOREIGN KEY (lose_brawler_id) REFERENCES brawlers(id),
     FOREIGN KEY (battle_log_id) REFERENCES battle_logs(id)
 );
+
+-- indexes for performance tuning
+CREATE INDEX IF NOT EXISTS idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
+CREATE INDEX IF NOT EXISTS idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
+CREATE INDEX IF NOT EXISTS idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
