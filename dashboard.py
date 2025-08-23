@@ -210,6 +210,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
             map_total = conn.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
                 "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
+                "JOIN _maps m ON rl.map_id = m.id "
                 f"WHERE {cond_map}",
                 params_map,
             ).fetchone()[0]
