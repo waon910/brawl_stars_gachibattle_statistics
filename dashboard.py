@@ -73,7 +73,7 @@ def load_ranks():
         return pd.read_sql_query("SELECT id, name_ja FROM _ranks ORDER BY id", conn)
 
 def brawler_usage(
-    season_id=None, mode_id=None, map_id=None, rank_id=None
+    season_id=None, rank_id=None, mode_id=None, map_id=None
 ) -> pd.DataFrame:
     """指定した階層でのキャラ使用率を集計する"""
     query = (
@@ -93,15 +93,15 @@ def brawler_usage(
         start, next_start = season_range(season_id)
         query += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
+    if rank_id is not None:
+        query += " AND rl.rank_id=?"
+        params.append(rank_id)
     if mode_id is not None:
         query += " AND m.mode_id=?"
         params.append(mode_id)
     if map_id is not None:
         query += " AND rl.map_id=?"
         params.append(map_id)
-    if rank_id is not None:
-        query += " AND rl.rank_id=?"
-        params.append(rank_id)
     query += " GROUP BY b.name_ja"
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(query, conn, params=params)
@@ -112,7 +112,7 @@ def brawler_usage(
         df["usage_rate"] = 0
     return df.sort_values("usage_rate", ascending=False)
 
-def brawler_win_rate(season_id=None, mode_id=None, map_id=None, rank_id=None):
+def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
     """指定した階層でのキャラ勝率を集計する"""
     base = (
         "FROM win_lose_logs w "
@@ -125,15 +125,15 @@ def brawler_win_rate(season_id=None, mode_id=None, map_id=None, rank_id=None):
         start, next_start = season_range(season_id)
         base += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
+    if rank_id is not None:
+        base += " AND rl.rank_id=?"
+        params.append(rank_id)
     if mode_id is not None:
         base += " AND m.mode_id=?"
         params.append(mode_id)
     if map_id is not None:
         base += " AND rl.map_id=?"
         params.append(map_id)
-    if rank_id is not None:
-        base += " AND rl.rank_id=?"
-        params.append(rank_id)
     with sqlite3.connect(DB_PATH) as conn:
         wins = pd.read_sql_query(
             "SELECT w.win_brawler_id AS brawler_id, COUNT(*) AS wins "
@@ -156,7 +156,7 @@ def brawler_win_rate(season_id=None, mode_id=None, map_id=None, rank_id=None):
     df = df.merge(brawlers, left_on="brawler_id", right_on="id").drop("id", axis=1)
     return df.rename(columns={"name_ja": "brawler"}).sort_values("win_rate", ascending=False)
 
-def battle_counts(season_id=None, mode_id=None, map_id=None, rank_id=None):
+def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
     """各階層での対戦数を取得する"""
     if season_id is not None:
         start, next_start = season_range(season_id)
@@ -172,40 +172,53 @@ def battle_counts(season_id=None, mode_id=None, map_id=None, rank_id=None):
             season_params,
         ).fetchone()[0]
 
-        if mode_id is not None:
-            mode = conn.execute(
-                f"SELECT COUNT(*) FROM battle_logs bl "
-                "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
-                "JOIN _maps m ON rl.map_id = m.id WHERE "
-                f"{season_cond} AND m.mode_id=?",
-                season_params + [mode_id],
-            ).fetchone()[0]
-        else:
-            mode = overall
-
-        if map_id is not None:
-            map_total = conn.execute(
-                f"SELECT COUNT(*) FROM battle_logs bl "
-                "JOIN rank_logs rl ON bl.rank_log_id = rl.id WHERE "
-                f"{season_cond} AND rl.map_id=?",
-                season_params + [map_id],
-            ).fetchone()[0]
-        else:
-            map_total = mode
+        cond = season_cond
+        params = season_params
 
         if rank_id is not None:
+            cond_rank = f"{cond} AND rl.rank_id=?"
+            params_rank = params + [rank_id]
             rank_total = conn.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
-                "JOIN rank_logs rl ON bl.rank_log_id = rl.id WHERE "
-                f"{season_cond} AND rl.rank_id=?",
-                season_params + [rank_id],
+                "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
+                f"WHERE {cond_rank}",
+                params_rank,
             ).fetchone()[0]
         else:
-            rank_total = map_total
+            cond_rank = cond
+            params_rank = params
+            rank_total = overall
 
-    return {"all": overall, "mode": mode, "map": map_total, "rank": rank_total}
+        if mode_id is not None:
+            cond_mode = f"{cond_rank} AND m.mode_id=?"
+            params_mode = params_rank + [mode_id]
+            mode_total = conn.execute(
+                f"SELECT COUNT(*) FROM battle_logs bl "
+                "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
+                "JOIN _maps m ON rl.map_id = m.id "
+                f"WHERE {cond_mode}",
+                params_mode,
+            ).fetchone()[0]
+        else:
+            cond_mode = cond_rank
+            params_mode = params_rank
+            mode_total = rank_total
 
-def matchup_rates(brawler_id, season_id=None, mode_id=None, map_id=None, rank_id=None):
+        if map_id is not None:
+            cond_map = f"{cond_mode} AND rl.map_id=?"
+            params_map = params_mode + [map_id]
+            map_total = conn.execute(
+                f"SELECT COUNT(*) FROM battle_logs bl "
+                "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
+                f"WHERE {cond_map}",
+                params_map,
+            ).fetchone()[0]
+        else:
+            map_total = mode_total
+
+    return {"all": overall, "rank": rank_total, "mode": mode_total, "map": map_total}
+
+def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id=None):
     """指定した階層での対キャラ勝率を集計する"""
     with sqlite3.connect(DB_PATH) as conn:
         query = (
@@ -216,15 +229,15 @@ def matchup_rates(brawler_id, season_id=None, mode_id=None, map_id=None, rank_id
             "JOIN _maps m ON rl.map_id = m.id WHERE 1=1"
         )
         params: list = []
-        if map_id is not None:
-            query += " AND rl.map_id=?"
-            params.append(map_id)
-        if mode_id is not None:
-            query += " AND m.mode_id=?"
-            params.append(mode_id)
         if rank_id is not None:
             query += " AND rl.rank_id=?"
             params.append(rank_id)
+        if mode_id is not None:
+            query += " AND m.mode_id=?"
+            params.append(mode_id)
+        if map_id is not None:
+            query += " AND rl.map_id=?"
+            params.append(map_id)
         if season_id is not None:
             start, next_start = season_range(season_id)
             query += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
@@ -266,6 +279,14 @@ def main():
     else:
         season_id = int(season_name.replace("シーズン", ""))
 
+    ranks = load_ranks()
+    rank_options = ["全体"] + ranks["name_ja"].tolist()
+    rank_name = st.selectbox("ランク", rank_options)
+    if rank_name == "全体":
+        rank_id = None
+    else:
+        rank_id = int(ranks[ranks["name_ja"] == rank_name]["id"].iloc[0])
+
     modes = load_modes()
     mode_options = ["全体"] + modes["name_ja"].tolist()
     mode_name = st.selectbox("モード", mode_options)
@@ -283,28 +304,26 @@ def main():
     else:
         map_id = int(maps[maps["name_ja"] == map_name]["id"].iloc[0])
 
-    ranks = load_ranks()
-    rank_options = ["全体"] + ranks["name_ja"].tolist()
-    rank_name = st.selectbox("ランク", rank_options)
-    if rank_name == "全体":
-        rank_id = None
-    else:
-        rank_id = int(ranks[ranks["name_ja"] == rank_name]["id"].iloc[0])
-
-    counts = battle_counts(season_id, mode_id, map_id, rank_id)
+    counts = battle_counts(
+        season_id=season_id, rank_id=rank_id, mode_id=mode_id, map_id=map_id
+    )
     st.caption(
-        f"全体: {counts['all']} / モード: {counts['mode']} / マップ: {counts['map']} / ランク: {counts['rank']}"
+        f"全体: {counts['all']} / ランク: {counts['rank']} / モード: {counts['mode']} / マップ: {counts['map']}"
     )
 
     st.header("キャラ使用率")
-    usage_df = brawler_usage(season_id, mode_id, map_id, rank_id)
+    usage_df = brawler_usage(
+        season_id=season_id, rank_id=rank_id, mode_id=mode_id, map_id=map_id
+    )
     if not usage_df.empty:
         st.bar_chart(usage_df.set_index("brawler")["usage_rate"])
     else:
         st.write("データがありません")
 
     st.header("キャラ勝率")
-    win_df = brawler_win_rate(season_id, mode_id, map_id, rank_id)
+    win_df = brawler_win_rate(
+        season_id=season_id, rank_id=rank_id, mode_id=mode_id, map_id=map_id
+    )
     if not win_df.empty:
         st.bar_chart(win_df.set_index("brawler")["win_rate"])
     else:
@@ -318,9 +337,9 @@ def main():
     match_df = matchup_rates(
         brawler_id,
         season_id=season_id,
+        rank_id=rank_id,
         mode_id=mode_id,
         map_id=map_id,
-        rank_id=rank_id,
     )
     if not match_df.empty:
         st.dataframe(match_df)
