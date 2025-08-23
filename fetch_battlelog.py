@@ -11,7 +11,7 @@ from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
 from coutry_code import COUNTRY_CODE
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 # リクエスト間隔（秒）
@@ -20,9 +20,13 @@ REQUEST_INTERVAL = 0.1
 MAX_RETRIES = 3
 # 集計開始日
 COL_START_DATE = "20250703"
+#取得サイクル時間
+ACQ_CYCLE_TIME = 12
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
+
+JST = timezone(timedelta(hours=9))
 
 @dataclass
 class ResultLog:
@@ -121,7 +125,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         return set()
 
     cur.execute(
-        "UPDATE players SET last_fetched=CURRENT_TIMESTAMP WHERE tag=?",
+        "UPDATE players SET last_fetched=datetime('now', '+9 hours') WHERE tag=?",
         (player_tag,),
     )
 
@@ -175,10 +179,12 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
                     my_side_idx = side_idx
                     resultLog.result = result
                 trophies = player.get("brawler", {}).get("trophies", 0)
+                if 18 < trophies <= 22:
+                    cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
+                    print(f"マスターランク発見！:{p_tag}")
                 if rank < trophies <= 22:
                     rank = trophies
             resultInfo.append(resultLog)
-
         if my_side_idx is not None and len(resultInfo) == 2 and result in OPPOSITE:
             other = 1 - my_side_idx
             # まだ埋まっていない場合のみ上書き
@@ -257,21 +263,21 @@ def main() -> None:
     conn = sqlite3.connect("brawl_stats.db")
 
     start_time = time.time()
+    print(f"開始時刻；{datetime.now(JST)}")
 
     fetch_rank_player(api_key, conn)
 
     fetch_rank_player_time = time.time() - start_time
-    print(f"\①処理時間: {format_time(fetch_rank_player_time)}")
+    print(f"①時刻；{datetime.now(JST)}")
+    print(f"①処理時間: {format_time(fetch_rank_player_time)}")
 
     rest = 0
 
     try:
         while 1:
             cur = conn.cursor()
-            # 72時間前の時刻を計算
-            seventy_two_hours_ago = datetime.now() - timedelta(hours=36)
+            seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
             
-            # 正しいSQL文（72時間以内に取得されていないプレイヤーを1件取得）
             current_tag = cur.execute(
                 "SELECT tag FROM players WHERE last_fetched < ? ORDER BY last_fetched ASC LIMIT 1",
                 (seventy_two_hours_ago,)
@@ -309,6 +315,7 @@ def main() -> None:
         conn.close()
         
         total_time = time.time() - start_time
+        print(f"②時刻；{datetime.now(JST)}")
         print(f"\n②処理時間: {format_time(total_time)}")
         
     print("バトルログの取得が完了しました。")
