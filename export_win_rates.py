@@ -6,6 +6,7 @@
 
 import argparse
 import json
+import logging
 import random
 import sqlite3
 from collections import defaultdict
@@ -62,14 +63,20 @@ def fetch_stats(conn: sqlite3.Connection, since: str) -> List[tuple]:
 
 
 def compute_win_rates(rows: List[tuple]) -> Dict[str, Dict[str, float]]:
+    logging.info("データを集計しています...")
     # map -> brawler -> {wins, games}
-    stats: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0}))
+    stats: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(
+        lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0})
+    )
     for map_name, brawler_name, wins, losses in rows:
         stats[map_name][brawler_name]["wins"] += wins
         stats[map_name][brawler_name]["games"] += wins + losses
 
+    logging.info("勝率を計算しています...")
     results: Dict[str, Dict[str, float]] = {}
-    for map_name, brawlers in stats.items():
+    total_maps = len(stats)
+    for idx, (map_name, brawlers) in enumerate(stats.items(), 1):
+        logging.info("%d/%d %s を処理中", idx, total_maps, map_name)
         total_wins = sum(v["wins"] for v in brawlers.values())
         total_games = sum(v["games"] for v in brawlers.values())
         if total_games == 0 or len(brawlers) == 0:
@@ -96,21 +103,27 @@ def main() -> None:
     parser.add_argument("--output", default="win_rates.json", help="出力先JSONファイル")
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     since = (datetime.utcnow() - timedelta(days=30)).strftime("%Y%m%d")
+    logging.info("データベースに接続しています: %s", args.db)
     try:
         conn = sqlite3.connect(args.db)
     except sqlite3.Error as e:
         raise SystemExit(f"データベースに接続できません: {e}")
     try:
+        logging.info("統計情報を取得しています...")
         rows = fetch_stats(conn, since)
+        logging.info("%d 行のデータを取得しました", len(rows))
     except sqlite3.Error as e:
         raise SystemExit(f"クエリの実行に失敗しました: {e}")
     finally:
         conn.close()
 
     result = compute_win_rates(rows)
+    logging.info("JSONファイルに書き込んでいます: %s", args.output)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
+    logging.info("JSON出力が完了しました")
 
 
 if __name__ == "__main__":
