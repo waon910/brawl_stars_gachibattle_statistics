@@ -13,13 +13,14 @@ from coutry_code import COUNTRY_CODE
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from dateutil.parser import parse
 
 # リクエスト間隔（秒）
-REQUEST_INTERVAL = 0.1
+REQUEST_INTERVAL = 0.05
 # 最大リトライ回数
 MAX_RETRIES = 3
 # 集計開始日
-COL_START_DATE = "20250703"
+COL_BEFORE_DATE = "30"
 #取得サイクル時間
 ACQ_CYCLE_TIME = 12
 
@@ -60,7 +61,7 @@ def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Opti
 def cleanup_old_logs(conn: sqlite3.Connection) -> int:
     """30日前より前のログデータを削除"""
     cur = conn.cursor()
-    threshold = (datetime.now(JST) - timedelta(days=30)).strftime("%Y%m%d")
+    threshold = (datetime.now(JST) - timedelta(days=COL_BEFORE_DATE)).strftime("%Y%m%d")
     cur.execute("SELECT id FROM rank_logs WHERE substr(id, 1, 8) < ?", (threshold,))
     old_rank_ids = [row[0] for row in cur.fetchall()]
     if not old_rank_ids:
@@ -167,7 +168,9 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         battle_mode = battle.get("event", {}).get("mode", "不明")
         battle_map = battle.get("event", {}).get("map", "不明")
         battle_time = battle.get("battleTime", "不明")
-        if battle_time < COL_START_DATE:
+        battle_datetime = parse(battle_time).astimezone(JST)
+        col_start_date = datetime.now(JST) - timedelta(days=COL_BEFORE_DATE)
+        if battle_datetime < col_start_date:
             continue
         star_player = battle_detail.get("starPlayer") or {}
         star_tag = star_player.get("tag")
