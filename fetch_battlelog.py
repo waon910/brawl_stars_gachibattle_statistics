@@ -56,6 +56,31 @@ def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Opti
             print(f"リクエストに失敗しました({attempt}/{MAX_RETRIES}): {e}. {wait}秒後に再試行します。")
             time.sleep(wait)
 
+
+def cleanup_old_logs(conn: sqlite3.Connection) -> int:
+    """30日前より前のログデータを削除"""
+    cur = conn.cursor()
+    threshold = (datetime.now(JST) - timedelta(days=30)).strftime("%Y%m%d")
+    cur.execute("SELECT id FROM rank_logs WHERE substr(id, 1, 8) < ?", (threshold,))
+    old_rank_ids = [row[0] for row in cur.fetchall()]
+    if not old_rank_ids:
+        return 0
+    placeholders = ",".join("?" for _ in old_rank_ids)
+    cur.execute(
+        f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
+        old_rank_ids,
+    )
+    cur.execute(
+        f"DELETE FROM battle_logs WHERE rank_log_id IN ({placeholders})",
+        old_rank_ids,
+    )
+    cur.execute(
+        f"DELETE FROM rank_logs WHERE id IN ({placeholders})",
+        old_rank_ids,
+    )
+    conn.commit()
+    return len(old_rank_ids)
+
 def fetch_rank_player(api_key: str, conn: sqlite3.Connection) -> set[str]:
     """ランク上位プレイヤーを取得してDBへ保存"""
     cur = conn.cursor()
@@ -261,6 +286,9 @@ def main() -> None:
         raise RuntimeError("環境変数 BRAWL_STARS_API_KEY が設定されていません。")
 
     conn = sqlite3.connect("brawl_stats.db")
+
+    deleted = cleanup_old_logs(conn)
+    print(f"削除したランクマッチ数:{deleted}")
 
     start_time = time.time()
     print(f"開始時刻；{datetime.now(JST)}")
