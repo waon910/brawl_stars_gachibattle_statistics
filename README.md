@@ -13,6 +13,16 @@ sqlite3 brawl_stats.db < schema.sql
 sqlite3 brawl_stats.db < insert_master.sql
 ```
 
+## データ取得と勝率出力
+
+バトルログの取得から勝率データの JSON 出力までを一括で行うシェルスクリプトを用意しています。実行前に Brawl Stars API キーを環境変数 `BRAWL_STARS_API_KEY` に設定してください。
+
+```bash
+./run_pipeline.sh
+```
+
+出力されたファイルは `output` フォルダに保存され、ファイル名には取得した日付範囲が含まれます。
+
 ## GUIダッシュボード
 
 `streamlit` を用いてデータベースの統計情報をリアルタイムに表示するダッシュボードを提供します。
