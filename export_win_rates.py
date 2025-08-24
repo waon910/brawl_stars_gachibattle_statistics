@@ -1,4 +1,4 @@
-"""Mapごとのキャラクター勝率をJSON形式で出力するスクリプト.
+"""マップIDごとのキャラクタータグ勝率をJSON形式で出力するスクリプト.
 
 過去30日間に行われたダイヤモンドランク以上の試合を対象とし、
 勝率はEmpirical Bayes(Beta-Binomial)による縮約と95%下側信頼区間(LCB)で算出する。
@@ -60,49 +60,47 @@ def fetch_stats(conn: sqlite3.Connection, since: str) -> List[tuple]:
         UNION ALL
         SELECT * FROM lose_results
     )
-    SELECT m.name_ja AS map_name, b.name_ja AS brawler_name,
+    SELECT wr.map_id, wr.brawler_id,
            SUM(wr.wins) AS wins, SUM(wr.losses) AS losses
     FROM weighted_results wr
-    JOIN _maps m ON m.id = wr.map_id
-    JOIN _brawlers b ON b.id = wr.brawler_id
     GROUP BY wr.map_id, wr.brawler_id
     """
     cur.execute(sql, (since,))
     return cur.fetchall()
 
 
-def compute_win_rates(rows: List[tuple]) -> Dict[str, Dict[str, float]]:
+def compute_win_rates(rows: List[tuple]) -> Dict[int, Dict[int, float]]:
     logging.info("データを集計しています...")
-    # map -> brawler -> {wins, games}
-    stats: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(
+    # map_id -> brawler_tag -> {wins, games}
+    stats: Dict[int, Dict[int, Dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0})
     )
-    for map_name, brawler_name, wins, losses in rows:
-        stats[map_name][brawler_name]["wins"] += wins
-        stats[map_name][brawler_name]["games"] += wins + losses
+    for map_id, brawler_id, wins, losses in rows:
+        stats[map_id][brawler_id]["wins"] += wins
+        stats[map_id][brawler_id]["games"] += wins + losses
 
     logging.info("勝率を計算しています...")
-    results: Dict[str, Dict[str, float]] = {}
+    results: Dict[int, Dict[int, float]] = {}
     total_maps = len(stats)
-    for idx, (map_name, brawlers) in enumerate(stats.items(), 1):
-        logging.info("%d/%d %s を処理中", idx, total_maps, map_name)
+    for idx, (map_id, brawlers) in enumerate(stats.items(), 1):
+        logging.info("%d/%d %s を処理中", idx, total_maps, map_id)
         total_wins = sum(v["wins"] for v in brawlers.values())
         total_games = sum(v["games"] for v in brawlers.values())
         if total_games == 0 or len(brawlers) == 0:
-            results[map_name] = {}
+            results[map_id] = {}
             continue
         mean = total_wins / total_games
         strength = total_games / len(brawlers)
         alpha_prior = mean * strength
         beta_prior = (1 - mean) * strength
 
-        map_result: Dict[str, float] = {}
-        for brawler_name, val in brawlers.items():
+        map_result: Dict[int, float] = {}
+        for brawler_id, val in brawlers.items():
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
             lcb = beta_lcb(alpha_post, beta_post)
-            map_result[brawler_name] = lcb
-        results[map_name] = map_result
+            map_result[brawler_id] = lcb
+        results[map_id] = map_result
     return results
 
 
