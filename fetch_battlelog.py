@@ -95,7 +95,7 @@ def fetch_rank_player(api_key: str, conn: sqlite3.Connection) -> set[str]:
 
         resp = get_with_retry(url, headers)
         if resp is None:
-            print(f'国コード：{code} エラー：ランキングを取得できませんでした。')
+            print(f'国コード:{code} エラー:ランキングを取得できませんでした。')
             continue
 
         try:
@@ -115,7 +115,7 @@ def fetch_rank_player(api_key: str, conn: sqlite3.Connection) -> set[str]:
                 if p_tag:
                     cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
         
-        print(f'国コード：{code} 取得プレイヤー数{count}')
+        print(f'国コード:{code} 取得プレイヤー数{count}')
         conn.commit()
 
 
@@ -227,7 +227,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
                     (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                 )
             except sqlite3.IntegrityError:
-                print(f"修正が必要 マップ：{battle_map} マップID:{battle_map_id} ランク：{rank}")
+                print(f"修正が必要 マップ:{battle_map} マップID:{battle_map_id} ランク:{rank}")
                 print(battle)
                 mode_id = cur.execute("SELECT id FROM _modes WHERE name=?",(battle_mode,),).fetchone()[0]
                 cur.execute(
@@ -266,7 +266,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
             )
         except sqlite3.IntegrityError:
             print("既に記録済みのバトルのためスキップ")
-            print(f"バトルログID：{battle_log_id} ランクログID：{rank_log_id}")
+            print(f"バトルログID:{battle_log_id} ランクログID:{rank_log_id}")
             continue
 
         winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
@@ -282,7 +282,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
             
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(dotenv_path=".env.local")
 
     api_key = os.getenv("BRAWL_STARS_API_KEY")
     if not api_key:
@@ -295,13 +295,13 @@ def main() -> None:
             print(f"削除したランクマッチ数:{deleted}")
 
             start_time = time.time()
-            print(f"開始時刻；{datetime.now(JST)}")
+            print(f"開始時刻:{datetime.now(JST)}")
 
             fetch_rank_player(api_key, conn)
 
             fetch_rank_player_time = time.time() - start_time
-            print(f"①時刻；{datetime.now(JST)}")
-            print(f"①処理時間: {format_time(fetch_rank_player_time)}")
+            print(f"①時刻:{datetime.now(JST)}")
+            print(f"①処理時間:{format_time(fetch_rank_player_time)}")
 
             rest = 0
 
@@ -346,8 +346,8 @@ def main() -> None:
                 print(f"集計済みバトル:{battles}")
                 
                 total_time = time.time() - start_time
-                print(f"②時刻；{datetime.now(JST)}")
-                print(f"\n②処理時間: {format_time(total_time)}")
+                print(f"②時刻:{datetime.now(JST)}")
+                print(f"②処理時間: {format_time(total_time)}")
 
     except sqlite3.OperationalError as e:
         print(f"データベース接続エラー: {e}")
