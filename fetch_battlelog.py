@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import sqlite3
 from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
-from coutry_code import COUNTRY_CODE
+from country_code import COUNTRY_CODE
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -20,7 +20,7 @@ REQUEST_INTERVAL = 0.05
 # 最大リトライ回数
 MAX_RETRIES = 3
 # 集計開始日
-COL_BEFORE_DATE = "30"
+COL_BEFORE_DATE = 30
 #取得サイクル時間
 ACQ_CYCLE_TIME = 12
 
@@ -287,68 +287,71 @@ def main() -> None:
     api_key = os.getenv("BRAWL_STARS_API_KEY")
     if not api_key:
         raise RuntimeError("環境変数 BRAWL_STARS_API_KEY が設定されていません。")
-
-    conn = sqlite3.connect("brawl_stats.db")
-
-    deleted = cleanup_old_logs(conn)
-    print(f"削除したランクマッチ数:{deleted}")
-
-    start_time = time.time()
-    print(f"開始時刻；{datetime.now(JST)}")
-
-    fetch_rank_player(api_key, conn)
-
-    fetch_rank_player_time = time.time() - start_time
-    print(f"①時刻；{datetime.now(JST)}")
-    print(f"①処理時間: {format_time(fetch_rank_player_time)}")
-
-    rest = 0
-
     try:
-        while 1:
-            cur = conn.cursor()
-            seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
-            
-            current_tag = cur.execute(
-                "SELECT tag FROM players WHERE last_fetched < ? ORDER BY last_fetched ASC LIMIT 1",
-                (seventy_two_hours_ago,)
-            ).fetchone()[0]
-            
-            if not current_tag:
-                print("対象プレイヤーがいません")
-                break
+        with sqlite3.connect('brawl_stats.db', timeout=30) as conn:
+            conn.execute('PRAGMA journal_mode=WAL')  # WALモードで並行アクセス改善
+    
+            deleted = cleanup_old_logs(conn)
+            print(f"削除したランクマッチ数:{deleted}")
 
-            fetch_battle_logs(current_tag, api_key, conn)
+            start_time = time.time()
+            print(f"開始時刻；{datetime.now(JST)}")
 
-            rest = cur.execute(
-                "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
-                (seventy_two_hours_ago,)
-            ).fetchone()[0]
-            if rest == 0:
-                print("全てのプレイヤーを集計しました")
-                break
-            print(f"残り集計対象プレイヤー数:{rest}")
+            fetch_rank_player(api_key, conn)
 
-    finally:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM players")
-        players = cur.fetchone()[0]
-        print(f"集計プレイヤー:{players-rest}")
-        print(f"プレイヤー総数:{players}")
+            fetch_rank_player_time = time.time() - start_time
+            print(f"①時刻；{datetime.now(JST)}")
+            print(f"①処理時間: {format_time(fetch_rank_player_time)}")
 
-        cur.execute("SELECT COUNT(*) FROM rank_logs")
-        rank_logs = cur.fetchone()[0]
-        print(f"集計済みランクマッチ:{rank_logs}")
+            rest = 0
 
-        cur.execute("SELECT COUNT(*) FROM battle_logs")
-        battles = cur.fetchone()[0]
-        print(f"集計済みバトル:{battles}")
-        conn.close()
-        
-        total_time = time.time() - start_time
-        print(f"②時刻；{datetime.now(JST)}")
-        print(f"\n②処理時間: {format_time(total_time)}")
-        
+            try:
+                while 1:
+                    cur = conn.cursor()
+                    seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
+                    
+                    current_tag = cur.execute(
+                        "SELECT tag FROM players WHERE last_fetched < ? ORDER BY last_fetched ASC LIMIT 1",
+                        (seventy_two_hours_ago,)
+                    ).fetchone()[0]
+                    
+                    if not current_tag:
+                        print("対象プレイヤーがいません")
+                        break
+
+                    fetch_battle_logs(current_tag, api_key, conn)
+
+                    rest = cur.execute(
+                        "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
+                        (seventy_two_hours_ago,)
+                    ).fetchone()[0]
+                    if rest == 0:
+                        print("全てのプレイヤーを集計しました")
+                        break
+                    print(f"残り集計対象プレイヤー数:{rest}")
+
+            finally:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM players")
+                players = cur.fetchone()[0]
+                print(f"集計プレイヤー:{players-rest}")
+                print(f"プレイヤー総数:{players}")
+
+                cur.execute("SELECT COUNT(*) FROM rank_logs")
+                rank_logs = cur.fetchone()[0]
+                print(f"集計済みランクマッチ:{rank_logs}")
+
+                cur.execute("SELECT COUNT(*) FROM battle_logs")
+                battles = cur.fetchone()[0]
+                print(f"集計済みバトル:{battles}")
+                
+                total_time = time.time() - start_time
+                print(f"②時刻；{datetime.now(JST)}")
+                print(f"\n②処理時間: {format_time(total_time)}")
+
+    except sqlite3.OperationalError as e:
+        print(f"データベース接続エラー: {e}")
+        return
     print("バトルログの取得が完了しました。")
 
 def format_time(seconds):

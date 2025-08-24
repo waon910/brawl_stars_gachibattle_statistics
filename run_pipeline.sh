@@ -6,8 +6,10 @@ OUTPUT_DIR="output"
 mkdir -p "$OUTPUT_DIR"
 
 # 30日前から今日までの日付範囲を計算（JST）
-START_DATE=$(TZ=Asia/Tokyo date -d '30 days ago' +%Y%m%d)
+START_DATE=$(TZ=Asia/Tokyo date -v-30d +%Y%m%d)
 END_DATE=$(TZ=Asia/Tokyo date +%Y%m%d)
+
+echo "期間: ${START_DATE} から ${END_DATE}"
 
 # バトルログを取得
 python3 fetch_battlelog.py
