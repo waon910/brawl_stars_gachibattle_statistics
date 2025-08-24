@@ -41,7 +41,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+logs/
 output/
-.env
+.env*
 brawl_stats.db-wal
 brawl_stats.db-shm
