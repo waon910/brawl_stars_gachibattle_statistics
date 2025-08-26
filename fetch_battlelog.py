@@ -209,7 +209,8 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
                 trophies = player.get("brawler", {}).get("trophies", 0)
                 if 18 < trophies <= 22:
                     cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
-                    print(f"マスターランク発見！:{p_tag}")
+                    if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
+                        print(f"マスターランク発見！:{p_tag}")
                 if rank < trophies <= 22:
                     rank = trophies
             resultInfo.append(resultLog)

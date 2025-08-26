@@ -13,7 +13,7 @@ LOG_DIR="${BASE_DIR}/logs"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 
 # ログ設定
-LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d').log"
+LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d%H%M').log"
 ERROR_LOG="${LOG_DIR}/error.log"
 
 # =============================================================================
@@ -159,7 +159,7 @@ main() {
     
     # 日付範囲の計算（JST）
     local start_date=$(TZ=Asia/Tokyo date -v-30d +%Y%m%d 2>/dev/null || TZ=Asia/Tokyo date -d '30 days ago' +%Y%m%d)
-    local end_date=$(TZ=Asia/Tokyo date +%Y%m%d)
+    local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
     local output_file="${OUTPUT_DIR}/win_rates_${start_date}-${end_date}.json"
     
     log_info "対象期間: ${start_date} から ${end_date}"
