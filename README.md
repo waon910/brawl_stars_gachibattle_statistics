@@ -4,18 +4,27 @@ Brawl Stars のバトルログを収集・分析するための簡易ツール�
 
 ## マスターデータの挿入
 
-スキーマ作成後、`insert_master.sql` を実行するとモード・マップ・キャラクターのマスターデータを一括で登録できます。
+スキーマ作成後、`insert_master.sql` を実行するとモード・マップ・キャラクターのマスターデータを一括で登録できます。データベースはMySQLを使用します。
 
 ```bash
-# データベース初期化
-sqlite3 brawl_stats.db < schema.sql
+# データベース作成（必要に応じてユーザー名・パスワードを変更）
+mysql -u root -p -e "CREATE DATABASE brawl_stats CHARACTER SET utf8mb4;"
+# スキーマ作成
+mysql -u root -p brawl_stats < schema.sql
 # マスターデータ挿入
-sqlite3 brawl_stats.db < insert_master.sql
+mysql -u root -p brawl_stats < insert_master.sql
+```
+
+既存のSQLiteデータベースから移行する場合は次のスクリプトを利用します。
+
+```bash
+pip install mysql-connector-python
+python migrate_sqlite_to_mysql.py --sqlite brawl_stats.db
 ```
 
 ## データ取得と勝率出力
 
-バトルログの取得から勝率データの JSON 出力までを一括で行うシェルスクリプトを用意しています。実行前に Brawl Stars API キーを環境変数 `BRAWL_STARS_API_KEY` に設定してください。
+バトルログの取得から勝率データの JSON 出力までを一括で行うシェルスクリプトを用意しています。実行前に Brawl Stars API キーを環境変数 `BRAWL_STARS_API_KEY` と MySQL接続情報 (`MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DB`) に設定してください。
 
 ```bash
 ./run_pipeline.sh

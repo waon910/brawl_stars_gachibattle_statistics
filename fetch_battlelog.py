@@ -6,7 +6,8 @@ from urllib.parse import quote
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
-import sqlite3
+import mysql.connector
+from db import get_connection
 from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
 from country_code import COUNTRY_CODE
@@ -58,15 +59,15 @@ def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Opti
             time.sleep(wait)
 
 
-def cleanup_old_logs(conn: sqlite3.Connection) -> int:
+def cleanup_old_logs(conn) -> int:
     """30日前より前のログデータを削除"""
     cur = conn.cursor()
     threshold = (datetime.now(JST) - timedelta(days=COL_BEFORE_DATE)).strftime("%Y%m%d")
-    cur.execute("SELECT id FROM rank_logs WHERE substr(id, 1, 8) < ?", (threshold,))
+    cur.execute("SELECT id FROM rank_logs WHERE SUBSTRING(id, 1, 8) < %s", (threshold,))
     old_rank_ids = [row[0] for row in cur.fetchall()]
     if not old_rank_ids:
         return 0
-    placeholders = ",".join("?" for _ in old_rank_ids)
+    placeholders = ",".join("%s" for _ in old_rank_ids)
     cur.execute(
         f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
         old_rank_ids,
@@ -82,7 +83,7 @@ def cleanup_old_logs(conn: sqlite3.Connection) -> int:
     conn.commit()
     return len(old_rank_ids)
 
-def fetch_rank_player(api_key: str, conn: sqlite3.Connection) -> set[str]:
+def fetch_rank_player(api_key: str, conn) -> set[str]:
     """ランク上位プレイヤーを取得してDBへ保存"""
     cur = conn.cursor()
 
@@ -113,13 +114,13 @@ def fetch_rank_player(api_key: str, conn: sqlite3.Connection) -> set[str]:
                 count+=1
                 p_tag = player.get("tag")
                 if p_tag:
-                    cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
+                    cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
         
         print(f'国コード:{code} 取得プレイヤー数{count}')
         conn.commit()
 
 
-def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -> set[str]:
+def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
     """指定したプレイヤーのバトルログを取得してDBへ保存"""
     cur = conn.cursor()
     tag_enc = quote(player_tag, safe="")
@@ -133,7 +134,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
     resp = get_with_retry(url, headers)
     if resp is None:
         cur.execute(
-            "DELETE FROM players WHERE tag=?",
+            "DELETE FROM players WHERE tag=%s",
             (player_tag,),
         )
         conn.commit()
@@ -151,8 +152,8 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         return set()
 
     cur.execute(
-        "UPDATE players SET last_fetched=datetime('now', '+9 hours') WHERE tag=?",
-        (player_tag,),
+        "UPDATE players SET last_fetched=%s WHERE tag=%s",
+        (datetime.now(JST), player_tag),
     )
 
     rank=0
@@ -179,7 +180,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
             rank_log_id = f"{battle_time}_{star_tag}"
             # ここですでに存在しているランクマッチを確認
             cur.execute(
-                "SELECT id FROM rank_logs WHERE id=?",
+                "SELECT id FROM rank_logs WHERE id=%s",
                 (rank_log_id,),
             )
             row = cur.fetchone()
@@ -208,7 +209,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
                     resultLog.result = result
                 trophies = player.get("brawler", {}).get("trophies", 0)
                 if 18 < trophies <= 22:
-                    cur.execute("INSERT OR IGNORE INTO players(tag) VALUES (?)", (p_tag,))
+                    cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                     if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
                         print(f"マスターランク発見！:{p_tag}")
                 if rank < trophies <= 22:
@@ -224,36 +225,36 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
             #新規ランクマッチ登録
             try:
                 cur.execute(
-                    "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (?, ?, ?)",
+                    "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                     (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                 )
-            except sqlite3.IntegrityError:
+            except mysql.connector.IntegrityError:
                 print(f"修正が必要 マップ:{battle_map} マップID:{battle_map_id} ランク:{rank}")
                 print(battle)
-                mode_id = cur.execute("SELECT id FROM _modes WHERE name=?",(battle_mode,),).fetchone()[0]
+                mode_id = cur.execute("SELECT id FROM _modes WHERE name=%s", (battle_mode,)).fetchone()[0]
                 cur.execute(
-                    "INSERT OR REPLACE INTO _maps(id, name, mode_id) VALUES (?, ?, ?)",
-                    (battle_map_id,battle_map,mode_id),
+                    "REPLACE INTO _maps(id, name, mode_id) VALUES (%s, %s, %s)",
+                    (battle_map_id, battle_map, mode_id),
                 )
                 MAP_NAME_TO_ID[battle_map] = battle_map_id
                 cur.execute(
-                    "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (?, ?, ?)",
+                    "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                     (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                 )
             for rlog in resultInfo:
                 for brawler_id in rlog.brawlers:
                     cur.execute(
-                        "SELECT count FROM brawler_used_ranks WHERE brawler_id=? AND map_id=? AND rank_id=?",
+                        "SELECT count FROM brawler_used_ranks WHERE brawler_id=%s AND map_id=%s AND rank_id=%s",
                         (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                     )
                     if cur.fetchone():
                         cur.execute(
-                            "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=? AND map_id=? AND rank_id=?",
+                            "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=%s AND map_id=%s AND rank_id=%s",
                             (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                         )
                     else:
                         cur.execute(
-                            "INSERT INTO brawler_used_ranks(brawler_id, map_id, rank_id, count) VALUES (?, ?, ?, 1)",
+                            "INSERT INTO brawler_used_ranks(brawler_id, map_id, rank_id, count) VALUES (%s, %s, %s, 1)",
                             (brawler_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                         )
             new_rank_brawlers_flag = False
@@ -262,10 +263,10 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         battle_log_id = f"{battle_time}_{p_tag}_battle"
         try:
             cur.execute(
-                "INSERT INTO battle_logs(id, rank_log_id) VALUES (?, ?)",
+                "INSERT INTO battle_logs(id, rank_log_id) VALUES (%s, %s)",
                 (battle_log_id, rank_log_id),
             )
-        except sqlite3.IntegrityError:
+        except mysql.connector.IntegrityError:
             print("既に記録済みのバトルのためスキップ")
             print(f"バトルログID:{battle_log_id} ランクログID:{rank_log_id}")
             continue
@@ -275,7 +276,7 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn: sqlite3.Connection) -
         for w in winners:
             for l in losers:
                 cur.execute(
-                    "INSERT OR IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (?, ?, ?)",
+                    "INSERT IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (%s, %s, %s)",
                     (w, l, battle_log_id),
                 )
                 
@@ -289,8 +290,7 @@ def main() -> None:
     if not api_key:
         raise RuntimeError("環境変数 BRAWL_STARS_API_KEY が設定されていません。")
     try:
-        with sqlite3.connect('brawl_stats.db', timeout=30) as conn:
-            conn.execute('PRAGMA journal_mode=WAL')  # WALモードで並行アクセス改善
+        with get_connection() as conn:
     
             deleted = cleanup_old_logs(conn)
             print(f"削除したランクマッチ数:{deleted}")
@@ -312,7 +312,7 @@ def main() -> None:
                     seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
                     
                     current_tag = cur.execute(
-                        "SELECT tag FROM players WHERE last_fetched < ? ORDER BY last_fetched ASC LIMIT 1",
+                        "SELECT tag FROM players WHERE last_fetched < %s ORDER BY last_fetched ASC LIMIT 1",
                         (seventy_two_hours_ago,)
                     ).fetchone()[0]
                     
@@ -323,7 +323,7 @@ def main() -> None:
                     fetch_battle_logs(current_tag, api_key, conn)
 
                     rest = cur.execute(
-                        "SELECT COUNT(*) FROM players WHERE last_fetched < ?",
+                        "SELECT COUNT(*) FROM players WHERE last_fetched < %s",
                         (seventy_two_hours_ago,)
                     ).fetchone()[0]
                     if rest == 0:
@@ -350,7 +350,7 @@ def main() -> None:
                 print(f"②時刻:{datetime.now(JST)}")
                 print(f"②処理時間: {format_time(total_time)}")
 
-    except sqlite3.OperationalError as e:
+    except mysql.connector.Error as e:
         print(f"データベース接続エラー: {e}")
         return
     print("バトルログの取得が完了しました。")

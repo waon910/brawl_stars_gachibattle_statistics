@@ -1,5 +1,7 @@
-import sqlite3
 from datetime import date, datetime, timedelta
+
+import mysql.connector
+from db import get_connection
 
 import pandas as pd
 import streamlit as st
@@ -8,8 +10,6 @@ try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     st_autorefresh = None
-
-DB_PATH = "brawl_stats.db"
 
 # シーズン計算用の基準値
 BASE_SEASON = 40
@@ -47,9 +47,9 @@ def season_range(season: int) -> tuple[date, date]:
 
 def load_seasons() -> list[int]:
     """DBに存在するシーズン一覧を取得"""
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         dates = pd.read_sql_query(
-            "SELECT DISTINCT substr(id,1,8) AS date FROM battle_logs", conn
+            "SELECT DISTINCT SUBSTRING(id,1,8) AS date FROM battle_logs", conn
         )["date"]
     seasons = {
         season_from_date(datetime.strptime(d, "%Y%m%d").date()) for d in dates
@@ -57,19 +57,19 @@ def load_seasons() -> list[int]:
     return sorted(seasons)
 
 def load_modes():
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         return pd.read_sql_query("SELECT id, name_ja FROM _modes ORDER BY id", conn)
 
 def load_maps(mode_id):
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         return pd.read_sql_query(
-            "SELECT id, name_ja FROM _maps WHERE mode_id=? ORDER BY id",
+            "SELECT id, name_ja FROM _maps WHERE mode_id=%s ORDER BY id",
             conn,
             params=(mode_id,),
         )
 
 def load_ranks():
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         return pd.read_sql_query("SELECT id, name_ja FROM _ranks ORDER BY id", conn)
 
 def brawler_usage(
@@ -91,19 +91,19 @@ def brawler_usage(
     params: list = []
     if season_id is not None:
         start, next_start = season_range(season_id)
-        query += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
+        query += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
     if rank_id is not None:
-        query += " AND rl.rank_id=?"
+        query += " AND rl.rank_id=%s"
         params.append(rank_id)
     if mode_id is not None:
-        query += " AND m.mode_id=?"
+        query += " AND m.mode_id=%s"
         params.append(mode_id)
     if map_id is not None:
-        query += " AND rl.map_id=?"
+        query += " AND rl.map_id=%s"
         params.append(map_id)
     query += " GROUP BY b.name_ja"
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         df = pd.read_sql_query(query, conn, params=params)
     total = df["count"].sum()
     if total > 0:
@@ -123,18 +123,18 @@ def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
     params: list = []
     if season_id is not None:
         start, next_start = season_range(season_id)
-        base += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
+        base += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
     if rank_id is not None:
-        base += " AND rl.rank_id=?"
+        base += " AND rl.rank_id=%s"
         params.append(rank_id)
     if mode_id is not None:
-        base += " AND m.mode_id=?"
+        base += " AND m.mode_id=%s"
         params.append(mode_id)
     if map_id is not None:
-        base += " AND rl.map_id=?"
+        base += " AND rl.map_id=%s"
         params.append(map_id)
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         wins = pd.read_sql_query(
             "SELECT w.win_brawler_id AS brawler_id, COUNT(*) AS wins "
             + base
@@ -160,13 +160,13 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
     """各階層での対戦数を取得する"""
     if season_id is not None:
         start, next_start = season_range(season_id)
-        season_cond = "substr(id,1,8) >= ? AND substr(id,1,8) < ?"
+        season_cond = "SUBSTRING(id,1,8) >= %s AND SUBSTRING(id,1,8) < %s"
         season_params = [start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")]
     else:
         season_cond = "1=1"
         season_params = []
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         overall = conn.execute(
             f"SELECT COUNT(*) FROM battle_logs bl WHERE {season_cond}",
             season_params,
@@ -176,7 +176,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
         params = season_params
 
         if rank_id is not None:
-            cond_rank = f"{cond} AND rl.rank_id=?"
+            cond_rank = f"{cond} AND rl.rank_id=%s"
             params_rank = params + [rank_id]
             rank_total = conn.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
@@ -190,7 +190,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
             rank_total = overall
 
         if mode_id is not None:
-            cond_mode = f"{cond_rank} AND m.mode_id=?"
+            cond_mode = f"{cond_rank} AND m.mode_id=%s"
             params_mode = params_rank + [mode_id]
             mode_total = conn.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
@@ -205,7 +205,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
             mode_total = rank_total
 
         if map_id is not None:
-            cond_map = f"{cond_mode} AND rl.map_id=?"
+            cond_map = f"{cond_mode} AND rl.map_id=%s"
             params_map = params_mode + [map_id]
             map_total = conn.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
@@ -221,7 +221,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
 
 def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id=None):
     """指定した階層での対キャラ勝率を集計する"""
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         query = (
             "SELECT w.win_brawler_id, w.lose_brawler_id, COUNT(*) AS cnt "
             "FROM win_lose_logs w "
@@ -231,17 +231,17 @@ def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id
         )
         params: list = []
         if rank_id is not None:
-            query += " AND rl.rank_id=?"
+            query += " AND rl.rank_id=%s"
             params.append(rank_id)
         if mode_id is not None:
-            query += " AND m.mode_id=?"
+            query += " AND m.mode_id=%s"
             params.append(mode_id)
         if map_id is not None:
-            query += " AND rl.map_id=?"
+            query += " AND rl.map_id=%s"
             params.append(map_id)
         if season_id is not None:
             start, next_start = season_range(season_id)
-            query += " AND substr(bl.id,1,8) >= ? AND substr(bl.id,1,8) < ?"
+            query += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
             params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
         query += " GROUP BY w.win_brawler_id, w.lose_brawler_id"
         df = pd.read_sql_query(query, conn, params=params)
@@ -258,7 +258,7 @@ def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id
     merged = pd.concat([wins, losses], axis=1).fillna(0)
     merged["total"] = merged["wins"] + merged["losses"]
     merged["win_rate"] = (merged["wins"] / merged["total"]) * 100
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn).set_index("id")
     merged = merged.join(brawlers).reset_index().rename(
         columns={"index": "brawler_id", "name_ja": "opponent"}
@@ -331,7 +331,7 @@ def main():
         st.write("データがありません")
 
     st.header("対キャラ勝率")
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
     brawler_name = st.selectbox("キャラ", brawlers["name_ja"])
     brawler_id = int(brawlers[brawlers["name_ja"] == brawler_name]["id"].iloc[0])
