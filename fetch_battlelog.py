@@ -311,21 +311,24 @@ def main() -> None:
                     cur = conn.cursor()
                     seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
                     
-                    current_tag = cur.execute(
+                    cur.execute(
                         "SELECT tag FROM players WHERE last_fetched < %s ORDER BY last_fetched ASC LIMIT 1",
-                        (seventy_two_hours_ago,)
-                    ).fetchone()[0]
-                    
+                        (seventy_two_hours_ago,),
+                    )
+                    row = cur.fetchone()
+                    current_tag = row[0] if row else None
+
                     if not current_tag:
                         print("対象プレイヤーがいません")
                         break
 
                     fetch_battle_logs(current_tag, api_key, conn)
 
-                    rest = cur.execute(
+                    cur.execute(
                         "SELECT COUNT(*) FROM players WHERE last_fetched < %s",
-                        (seventy_two_hours_ago,)
-                    ).fetchone()[0]
+                        (seventy_two_hours_ago,),
+                    )
+                    rest = cur.fetchone()[0]
                     if rest == 0:
                         print("全てのプレイヤーを集計しました")
                         break
