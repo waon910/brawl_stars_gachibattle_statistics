@@ -8,7 +8,8 @@ import argparse
 import json
 import logging
 import random
-import sqlite3
+import mysql.connector
+from db import get_connection
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -26,14 +27,14 @@ def beta_lcb(alpha: float, beta: float, confidence: float = 0.95) -> float:
     return samples[index]
 
 
-def fetch_stats(conn: sqlite3.Connection, since: str) -> List[tuple]:
+def fetch_stats(conn, since: str) -> List[tuple]:
     cur = conn.cursor()
     sql = """
     WITH recent_battles AS (
         SELECT bl.id AS battle_log_id, rl.map_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= 4 AND substr(rl.id,1,8) >= ?
+        WHERE rl.rank_id >= 4 AND SUBSTRING(rl.id,1,8) >= %s
     ), pair_counts AS (
         SELECT wl.battle_log_id,
                COUNT(DISTINCT wl.win_brawler_id) AS win_cnt,
@@ -106,22 +107,21 @@ def compute_win_rates(rows: List[tuple]) -> Dict[int, Dict[int, float]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="勝率統計データをJSONとして出力")
-    parser.add_argument("--db", default="brawl_stats.db", help="SQLiteデータベースファイル")
     parser.add_argument("--output", default="win_rates.json", help="出力先JSONファイル")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     since = (datetime.utcnow() - timedelta(days=30)).strftime("%Y%m%d")
-    logging.info("データベースに接続しています: %s", args.db)
+    logging.info("データベースに接続しています")
     try:
-        conn = sqlite3.connect(args.db)
-    except sqlite3.Error as e:
+        conn = get_connection()
+    except mysql.connector.Error as e:
         raise SystemExit(f"データベースに接続できません: {e}")
     try:
         logging.info("統計情報を取得しています...")
         rows = fetch_stats(conn, since)
         logging.info("%d 行のデータを取得しました", len(rows))
-    except sqlite3.Error as e:
+    except mysql.connector.Error as e:
         raise SystemExit(f"クエリの実行に失敗しました: {e}")
     finally:
         conn.close()
