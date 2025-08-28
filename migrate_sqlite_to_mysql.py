@@ -23,9 +23,15 @@ def migrate(sqlite_path: str) -> None:
         rows = s_cur.execute(f'SELECT * FROM {table}').fetchall()
         if not rows:
             continue
-        placeholders = ','.join(['%s'] * len(rows[0]))
+        columns = [desc[0] for desc in s_cur.description]
+        placeholders = ','.join(['%s'] * len(columns))
+        updates = ','.join([f"{col}=VALUES({col})" for col in columns])
+        query = (
+            f"INSERT INTO {table} ({','.join(columns)}) VALUES ({placeholders}) "
+            f"ON DUPLICATE KEY UPDATE {updates}"
+        )
         for row in rows:
-            d_cur.execute(f'REPLACE INTO {table} VALUES ({placeholders})', row)
+            d_cur.execute(query, row)
     dst.commit()
     src.close()
     dst.close()
