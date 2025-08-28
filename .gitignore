@@ -47,3 +47,5 @@ output/
 brawl_stats.db-wal
 brawl_stats.db-shm
 brawl_stats.db
+Local MySQL.session.sql
+.vscode/
