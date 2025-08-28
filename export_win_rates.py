@@ -77,8 +77,13 @@ def compute_win_rates(rows: List[tuple]) -> Dict[int, Dict[int, float]]:
         lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0})
     )
     for map_id, brawler_id, wins, losses in rows:
-        stats[map_id][brawler_id]["wins"] += wins
-        stats[map_id][brawler_id]["games"] += wins + losses
+        # MySQLコネクタは SUM 関数の結果を decimal.Decimal で返すため
+        # float と混在すると演算で TypeError が発生する。
+        # ここではすべての値を明示的に float に変換して集計する。
+        wins_f = float(wins)
+        losses_f = float(losses)
+        stats[map_id][brawler_id]["wins"] += wins_f
+        stats[map_id][brawler_id]["games"] += wins_f + losses_f
 
     logging.info("勝率を計算しています...")
     results: Dict[int, Dict[int, float]] = {}
