@@ -4,6 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PIPELINE_SCRIPT="${SCRIPT_DIR}/run_pipeline.sh"
 
 # =============================================================================
@@ -64,7 +65,7 @@ setup_logrotate() {
     
     # logrotate設定ファイルの作成（root権限が必要）
     sudo tee "$logrotate_config" > /dev/null << EOF
-${SCRIPT_DIR}/logs/*.log {
+${BASE_DIR}/data/logs/*.log {
     daily
     missingok
     rotate 30
@@ -112,7 +113,7 @@ check_requirements() {
     # Python スクリプトの確認
     local missing_scripts=()
     for script in "fetch_battlelog.py" "export_win_rates.py"; do
-        if [[ ! -f "${SCRIPT_DIR}/$script" ]]; then
+        if [[ ! -f "${BASE_DIR}/src/$script" ]]; then
             missing_scripts+=("$script")
         fi
     done
@@ -142,7 +143,7 @@ check_requirements() {
 create_directories() {
     echo "必要なディレクトリを作成しています..."
     
-    local dirs=("${SCRIPT_DIR}/output" "${SCRIPT_DIR}/logs")
+    local dirs=("${BASE_DIR}/data/output" "${BASE_DIR}/data/logs")
     
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
@@ -190,14 +191,14 @@ main() {
     echo "   $PIPELINE_SCRIPT"
     echo ""
     echo "2. ログを確認してください:"
-    echo "   tail -f ${SCRIPT_DIR}/logs/\$(date +%Y%m%d).log"
+    echo "   tail -f ${BASE_DIR}/data/logs/\$(date +%Y%m%d).log"
     echo ""
     echo "3. cron実行を監視してください:"
     echo "   - 次回実行: 今日または明日の00:00または12:00 JST"
-    echo "   - ログ確認: tail -f ${SCRIPT_DIR}/logs/\$(date +%Y%m%d).log"
+    echo "   - ログ確認: tail -f ${BASE_DIR}/data/logs/\$(date +%Y%m%d).log"
     echo ""
     echo "4. 問題が発生した場合:"
-    echo "   - エラーログ: tail -f ${SCRIPT_DIR}/logs/error.log"
+    echo "   - エラーログ: tail -f ${BASE_DIR}/data/logs/error.log"
     echo "   - cron設定確認: crontab -l"
     echo ""
 }

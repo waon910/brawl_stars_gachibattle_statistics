@@ -5,47 +5,37 @@ set -euo pipefail
 # 設定
 # =============================================================================
 SCRIPT_NAME="brawl_stars_pipeline"
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="${BASE_DIR}/output"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
+OUTPUT_DIR="${BASE_DIR}/data/output"
+LOG_DIR="${BASE_DIR}/data/logs"
 APP_DIR="/Users/shunsukeiwao/develop/brawl_stars_gachibattle_app"
 COPY_PATH="/lib/map-meta/win_rates.json"
-LOG_DIR="${BASE_DIR}/logs"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 
 # ログ設定
 LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d%H%M').log"
-ERROR_LOG="${LOG_DIR}/error.log"
 
 # =============================================================================
 # 初期設定
 # =============================================================================
 setup() {
-    # 必要なディレクトリを作成
     mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
-    
-    # ログファイルのローテーション（30日以上古いファイルを削除）
     find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true
+    exec > >(tee -a "$LOG_FILE") 2>&1
 }
 
 # =============================================================================
 # ログ関数
 # =============================================================================
 log() {
-    local level="$1"
-    shift
-    local message="$*"
+    local level="$1"; shift
     local timestamp=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S')
-    
-    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
-    
-    if [[ "$level" == "エラー" ]]; then
-        echo "[$timestamp] [$level] $message" >> "$ERROR_LOG"
-    fi
+    echo "[$timestamp] [$level] $*"
 }
 
-log_info() { log "情報" "$@"; }
-log_warn() { log "警告" "$@"; }
-log_error() { log "エラー" "$@"; }
+log_info() { log "INFO" "$@"; }
+log_warn() { log "WARN" "$@"; }
+log_error() { log "ERROR" "$@"; }
 
 # =============================================================================
 # 重複実行チェック
@@ -60,7 +50,7 @@ check_duplicate() {
     fi
     
     # 新しいPIDを記録
-    echo $ > "$PID_FILE"
+    echo $$ > "$PID_FILE"
 }
 
 # =============================================================================
@@ -143,10 +133,10 @@ git_operations() {
 # メイン処理
 # =============================================================================
 main() {
-    log_info "Brawl Starsデータパイプラインを開始します"
-    
     # 初期設定
     setup
+
+    log_info "Brawl Starsデータパイプラインを開始します"
     
     # 重複実行チェック
     check_duplicate
@@ -166,14 +156,14 @@ main() {
     
     # バトルログを取得
     log_info "バトルログを取得しています"
-    if ! python3 fetch_battlelog.py >> "$LOG_FILE" 2>&1; then
+    if ! python3 -m src.fetch_battlelog; then
         log_error "バトルログの取得に失敗しました"
         exit 1
     fi
-    
+
     # 勝率データを出力
     log_info "勝率データをエクスポートしています"
-    if ! python3 export_win_rates.py --output "$output_file" >> "$LOG_FILE" 2>&1; then
+    if ! python3 -m src.export_win_rates --output "$output_file"; then
         log_error "勝率データのエクスポートに失敗しました"
         exit 1
     fi
