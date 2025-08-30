@@ -1,6 +1,7 @@
 import argparse
 import sqlite3
-from db import get_connection
+
+from .db import get_connection
 
 TABLES = [
     'players',
