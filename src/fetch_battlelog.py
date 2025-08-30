@@ -264,14 +264,14 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                         (rank_log_id, map_id, rank_id),
                     )
-                except mysql.connector.IntegrityError:
+                except mysql.connector.IntegrityError as e:
                     logger.warning(
                         "未登録のマップを検出: マップ=%s マップID=%s ランク=%s",
                         battle_map,
                         battle_map_id,
                         rank,
                     )
-                    logger.warning("Battle detail: %s", battle)
+                    logger.warning("Battle detail: %s error:%s", battle, e)
                     mode_id = cur.execute("SELECT id FROM _modes WHERE name=%s", (battle_mode,)).fetchone()[0]
                     cur.execute(
                         "REPLACE INTO _maps(id, name, mode_id) VALUES (%s, %s, %s)",
