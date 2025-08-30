@@ -1,20 +1,21 @@
-import os
 import json
+import logging
+import os
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import mysql.connector
 import requests
+from dateutil.parser import parse
 from dotenv import load_dotenv
 from urllib.parse import quote
-from datetime import datetime
-from pathlib import Path
-from dataclasses import dataclass, field
-import mysql.connector
+
+from country_code import COUNTRY_CODE
 from db import get_connection
 from map import MAP_NAME_TO_ID
 from rank import RANK_TO_ID
-from country_code import COUNTRY_CODE
-import time
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-from dateutil.parser import parse
 
 # リクエスト間隔（秒）
 REQUEST_INTERVAL = 0.05
@@ -32,32 +33,45 @@ OPPOSITE = {"victory": "defeat", "defeat": "victory"}
 
 JST = timezone(timedelta(hours=9))
 
+logger = logging.getLogger(__name__)
+
 @dataclass
 class ResultLog:
     result: str = "不明"
     brawlers: list[str] = field(default_factory=list)
 
 
-def get_with_retry(url: str, headers: dict[str, str], timeout: int = 15) -> Optional[requests.Response]:
-    """APIにリクエストを送り、失敗した場合はリトライを行う"""
-    for attempt in range(1, MAX_RETRIES + 1):
+def request_with_retry(
+    url: str,
+    headers: Optional[dict[str, str]] = None,
+    method: str = "GET",
+    timeout: int = 15,
+    max_retries: int = MAX_RETRIES,
+    request_interval: float = REQUEST_INTERVAL,
+) -> Optional[requests.Response]:
+    """API にリクエストを送り、失敗した場合はリトライを行う汎用関数"""
+
+    for attempt in range(1, max_retries + 1):
         try:
-            time.sleep(REQUEST_INTERVAL)
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            time.sleep(request_interval)
+            resp = requests.request(method, url, headers=headers, timeout=timeout)
             if resp.status_code == 404:
-                print(f"プレイヤーが見つかりません: {url}")
+                logger.warning("Resource not found: %s", url)
                 return None
-            elif resp.status_code == 200:
-                resp.raise_for_status()
-                return resp
-            else:
-                resp.raise_for_status()
+            resp.raise_for_status()
+            return resp
         except requests.RequestException as e:
-            if attempt == MAX_RETRIES:
-                print(f"リクエストに失敗しました: {e}")
+            if attempt == max_retries:
+                logger.error("Request failed: %s", e)
                 return None
-            wait = 3 * attempt 
-            print(f"リクエストに失敗しました({attempt}/{MAX_RETRIES}): {e}. {wait}秒後に再試行します。")
+            wait = 3 * attempt
+            logger.warning(
+                "Request failed (%d/%d): %s. Retrying in %d seconds.",
+                attempt,
+                max_retries,
+                e,
+                wait,
+            )
             time.sleep(wait)
 
 
@@ -96,16 +110,16 @@ def fetch_rank_player(api_key: str, conn) -> set[str]:
             "Accept": "application/json",
         }
 
-        resp = get_with_retry(url, headers)
+        resp = request_with_retry(url, headers=headers)
         if resp is None:
-            print(f'国コード:{code} エラー:ランキングを取得できませんでした。')
+            logger.error("国コード:%s エラー:ランキングを取得できませんでした。", code)
             continue
 
         try:
             data = resp.json()
         except json.JSONDecodeError as e:
-            print(f"JSONの解析に失敗しました: {e} ")
-            code
+            logger.error("JSON の解析に失敗しました: %s", e)
+            continue
         
         rank_players = data.get("items", [])
 
@@ -118,7 +132,7 @@ def fetch_rank_player(api_key: str, conn) -> set[str]:
                 if p_tag:
                     cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
         
-        print(f'国コード:{code} 取得プレイヤー数{count}')
+        logger.info("国コード:%s 取得プレイヤー数 %d", code, count)
         conn.commit()
 
 
@@ -133,24 +147,25 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
         "Accept": "application/json",
     }
 
-    resp = get_with_retry(url, headers)
+    resp = request_with_retry(url, headers=headers)
     if resp is None:
         cur.execute(
             "DELETE FROM players WHERE tag=%s",
             (player_tag,),
         )
         conn.commit()
+        logger.warning("プレイヤーが見つかりません: %s", player_tag)
         return set()
 
     try:
         data = resp.json()
     except json.JSONDecodeError as e:
-        print(f"JSONの解析に失敗しました: {e}")
+        logger.error("JSON の解析に失敗しました: %s", e)
         return set()
 
     battle_logs = data.get("items", [])
     if len(battle_logs) < 1:
-        print("バトルログが見つかりませんでした。")
+        logger.info("バトルログが見つかりませんでした。")
         return set()
 
     cur.execute(
@@ -212,11 +227,11 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
                     resultLog.result = result
                     if trophies < 7:
                         cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
-                        print(f"プレイヤー削除！:{p_tag}")
+                        logger.info("プレイヤー削除:%s", p_tag)
                 if 18 < trophies <= 22:
                     cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                     if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
-                        print(f"マスターランク発見！:{p_tag}")
+                        logger.info("マスターランク発見:%s", p_tag)
                 if rank < trophies <= 22:
                     rank = trophies
             resultInfo.append(resultLog)
@@ -234,8 +249,13 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
                     (rank_log_id, MAP_NAME_TO_ID.get(battle_map), RANK_TO_ID.get(rank)),
                 )
             except mysql.connector.IntegrityError:
-                print(f"修正が必要 マップ:{battle_map} マップID:{battle_map_id} ランク:{rank}")
-                print(battle)
+                logger.warning(
+                    "未登録のマップを検出: マップ=%s マップID=%s ランク=%s",
+                    battle_map,
+                    battle_map_id,
+                    rank,
+                )
+                logger.debug("Battle detail: %s", battle)
                 mode_id = cur.execute("SELECT id FROM _modes WHERE name=%s", (battle_mode,)).fetchone()[0]
                 cur.execute(
                     "REPLACE INTO _maps(id, name, mode_id) VALUES (%s, %s, %s)",
@@ -272,8 +292,11 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
                 (battle_log_id, rank_log_id),
             )
         except mysql.connector.IntegrityError:
-            print("既に記録済みのバトルのためスキップ")
-            print(f"バトルログID:{battle_log_id} ランクログID:{rank_log_id}")
+            logger.debug(
+                "既に記録済みのバトルのためスキップ battle_log_id=%s rank_log_id=%s",
+                battle_log_id,
+                rank_log_id,
+            )
             continue
 
         winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
@@ -289,6 +312,10 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
             
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     load_dotenv(dotenv_path=".env.local")
 
     api_key = os.getenv("BRAWL_STARS_API_KEY")
@@ -298,16 +325,16 @@ def main() -> None:
         with get_connection() as conn:
     
             deleted = cleanup_old_logs(conn)
-            print(f"削除したランクマッチ数:{deleted}")
+            logger.info("削除したランクマッチ数:%d", deleted)
 
             start_time = time.time()
-            print(f"開始時刻:{datetime.now(JST)}")
+            logger.info("開始時刻:%s", datetime.now(JST))
 
             fetch_rank_player(api_key, conn)
 
             fetch_rank_player_time = time.time() - start_time
-            print(f"①時刻:{datetime.now(JST)}")
-            print(f"①処理時間:{format_time(fetch_rank_player_time)}")
+            logger.info("①時刻:%s", datetime.now(JST))
+            logger.info("①処理時間:%s", format_time(fetch_rank_player_time))
 
             rest = 0
 
@@ -324,7 +351,7 @@ def main() -> None:
                     current_tag = row[0] if row else None
 
                     if not current_tag:
-                        print("対象プレイヤーがいません")
+                        logger.info("対象プレイヤーがいません")
                         break
 
                     fetch_battle_logs(current_tag, api_key, conn)
@@ -335,33 +362,33 @@ def main() -> None:
                     )
                     rest = cur.fetchone()[0]
                     if rest == 0:
-                        print("全てのプレイヤーを集計しました")
+                        logger.info("全てのプレイヤーを集計しました")
                         break
-                    print(f"残り集計対象プレイヤー数:{rest}")
+                    logger.info("残り集計対象プレイヤー数:%d", rest)
 
             finally:
                 cur = conn.cursor()
                 cur.execute("SELECT COUNT(*) FROM players")
                 players = cur.fetchone()[0]
-                print(f"集計プレイヤー:{players-rest}")
-                print(f"プレイヤー総数:{players}")
+                logger.info("集計プレイヤー:%d", players - rest)
+                logger.info("プレイヤー総数:%d", players)
 
                 cur.execute("SELECT COUNT(*) FROM rank_logs")
                 rank_logs = cur.fetchone()[0]
-                print(f"集計済みランクマッチ:{rank_logs}")
+                logger.info("集計済みランクマッチ:%d", rank_logs)
 
                 cur.execute("SELECT COUNT(*) FROM battle_logs")
                 battles = cur.fetchone()[0]
-                print(f"集計済みバトル:{battles}")
-                
+                logger.info("集計済みバトル:%d", battles)
+
                 total_time = time.time() - start_time
-                print(f"②時刻:{datetime.now(JST)}")
-                print(f"②処理時間: {format_time(total_time)}")
+                logger.info("②時刻:%s", datetime.now(JST))
+                logger.info("②処理時間:%s", format_time(total_time))
 
     except mysql.connector.Error as e:
-        print(f"データベース接続エラー: {e}")
+        logger.error("データベース接続エラー: %s", e)
         return
-    print("バトルログの取得が完了しました。")
+    logger.info("バトルログの取得が完了しました。")
 
 def format_time(seconds):
     """秒を時:分:秒の形式に変換"""
