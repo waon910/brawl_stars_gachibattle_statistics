@@ -41,8 +41,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-logs/
-output/
+/data/logs/*
+!/data/logs/.gitkeep
+/data/output/*
+!/data/output/.gitkeep
+__pycache__/
 .env*
 brawl_stats.db-wal
 brawl_stats.db-shm
