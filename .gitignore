@@ -52,3 +52,10 @@ brawl_stats.db-shm
 brawl_stats.db
 Local MySQL.session.sql
 .vscode/
+
+venv/
+env/
+.venv/
+.env/
+
+.brawl_stars_pipeline.pid

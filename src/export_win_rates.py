@@ -9,7 +9,7 @@ import json
 import logging
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
 import mysql.connector
@@ -120,7 +120,8 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    since = (datetime.utcnow() - timedelta(days=30)).strftime("%Y%m%d")
+    jst_now = datetime.now(timezone(timedelta(hours=9)))
+    since = (jst_now - timedelta(days=30)).strftime("%Y%m%d")
     logging.info("データベースに接続しています")
     try:
         conn = get_connection()

@@ -330,14 +330,8 @@ def main() -> None:
             logger.info("削除したランクマッチ数:%d", deleted)
 
             start_time = time.time()
-            logger.info("開始時刻:%s", datetime.now(JST))
 
             fetch_rank_player(api_key, conn)
-
-            fetch_rank_player_time = time.time() - start_time
-            logger.info("①時刻:%s", datetime.now(JST))
-            logger.info("①処理時間:%s", format_time(fetch_rank_player_time))
-
             rest = 0
 
             try:
@@ -384,7 +378,6 @@ def main() -> None:
                 logger.info("集計済みバトル:%d", battles)
 
                 total_time = time.time() - start_time
-                logger.info("②時刻:%s", datetime.now(JST))
                 logger.info("②処理時間:%s", format_time(total_time))
 
     except mysql.connector.Error as e:

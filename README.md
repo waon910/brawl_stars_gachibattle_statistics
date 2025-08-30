@@ -15,13 +15,6 @@ mysql -u root -p brawl_stats < sql/schema.sql
 mysql -u root -p brawl_stats < sql/insert_master.sql
 ```
 
-既存のSQLiteデータベースから移行する場合は次のスクリプトを利用します。
-
-```bash
-pip install mysql-connector-python
-python -m src.migrate_sqlite_to_mysql --sqlite brawl_stats.db
-```
-
 ## データ取得と勝率出力
 
 バトルログの取得から勝率データの JSON 出力までを一括で行うシェルスクリプトを用意しています。実行前に Brawl Stars API キーを環境変数 `BRAWL_STARS_API_KEY` と MySQL接続情報 (`MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DB`) に設定してください。
