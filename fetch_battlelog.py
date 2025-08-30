@@ -22,8 +22,10 @@ REQUEST_INTERVAL = 0.05
 MAX_RETRIES = 3
 # 集計開始日
 COL_BEFORE_DATE = 30
-#取得サイクル時間
-ACQ_CYCLE_TIME = 12
+# 取得サイクル時間
+ACQ_CYCLE_TIME = 18
+# トロフィー境界
+TROPHIE_BORDER = 90000
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
@@ -110,7 +112,7 @@ def fetch_rank_player(api_key: str, conn) -> set[str]:
         count=0
         for player in rank_players:
             p_t=player.get("trophies", 0)
-            if 85000 < p_t or p_t == 1:
+            if TROPHIE_BORDER < p_t or p_t == 1:
                 count+=1
                 p_tag = player.get("tag")
                 if p_tag:
@@ -204,10 +206,13 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
             for player in team:
                 resultLog.brawlers.append(player.get("brawler", {}).get("id", "不明"))
                 p_tag = player.get("tag")
+                trophies = player.get("brawler", {}).get("trophies", 0)
                 if p_tag == player_tag:
                     my_side_idx = side_idx
                     resultLog.result = result
-                trophies = player.get("brawler", {}).get("trophies", 0)
+                    if trophies < 7:
+                        cur.execute("DELETE FROM players WHERE tag=?", (player_tag,))
+                        print(f"プレイヤー削除！:{p_tag}")
                 if 18 < trophies <= 22:
                     cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                     if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
