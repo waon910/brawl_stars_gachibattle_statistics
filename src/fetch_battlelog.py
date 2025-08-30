@@ -229,7 +229,8 @@ def fetch_battle_logs(player_tag: str, api_key: str, conn) -> set[str]:
                     resultLog.result = result
                     if trophies < 7:
                         cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
-                        logger.info("プレイヤー削除:%s", p_tag)
+                        if cur.rowcount == 1:  # 削除されたら1、既に存在しなかったら0
+                            logger.info("プレイヤー削除:%s", player_tag)
                 if 18 < trophies <= 22:
                     cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                     if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
