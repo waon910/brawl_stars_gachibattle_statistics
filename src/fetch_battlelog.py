@@ -12,10 +12,11 @@ from dateutil.parser import parse
 from dotenv import load_dotenv
 from urllib.parse import quote
 
-from country_code import COUNTRY_CODE
-from db import get_connection
-from map import MAP_NAME_TO_ID
-from rank import RANK_TO_ID
+from .country_code import COUNTRY_CODE
+from .db import get_connection
+from .map import MAP_NAME_TO_ID
+from .rank import RANK_TO_ID
+from .logging_config import setup_logging
 
 # リクエスト間隔（秒）
 REQUEST_INTERVAL = 0.05
@@ -33,6 +34,7 @@ OPPOSITE = {"victory": "defeat", "defeat": "victory"}
 
 JST = timezone(timedelta(hours=9))
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 @dataclass

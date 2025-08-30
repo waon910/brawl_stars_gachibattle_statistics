@@ -8,15 +8,19 @@ import argparse
 import json
 import logging
 import random
-import mysql.connector
-from db import get_connection
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
 
+import mysql.connector
+
+from .db import get_connection
+from .logging_config import setup_logging
+
 # Monte Carloサンプリング数
 SAMPLE_SIZE = 10000
 random.seed(0)
+setup_logging()
 
 
 def beta_lcb(alpha: float, beta: float, confidence: float = 0.95) -> float:
