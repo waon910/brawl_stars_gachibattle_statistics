@@ -156,10 +156,10 @@ main() {
     
     # バトルログを取得
     log_info "バトルログを取得しています"
-    # if ! python -m src.fetch_battlelog; then
-    #     log_error "バトルログの取得に失敗しました"
-    #     exit 1
-    # fi
+    if ! python -m src.fetch_battlelog; then
+        log_error "バトルログの取得に失敗しました"
+        exit 1
+    fi
 
     # 勝率データを出力
     log_info "勝率データをエクスポートしています"
