@@ -9,7 +9,9 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
 OUTPUT_DIR="${BASE_DIR}/data/output"
 LOG_DIR="${BASE_DIR}/data/logs"
 APP_DIR="/Users/shunsukeiwao/develop/brawl_stars_gachibattle_app"
-COPY_PATH="/lib/map-meta/win_rates.json"
+COPY_PATH="/lib/map-meta/"
+WIN_RATE_FILE_NAME="win_rates.json"
+PAIR_STATS_DIR_NAME="pair_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 
 # ログ設定
@@ -88,8 +90,9 @@ trap 'handle_error ${LINENO} "$BASH_COMMAND" $?' ERR
 # Git操作の関数
 # =============================================================================
 git_operations() {
-    local file_path="$1"
-    local end_date="$2"
+    local win_rates_path="$1"
+    local pair_stats_path="$2"
+    local end_date="$3"
     
     log_info "Git操作を開始しています"
     
@@ -150,7 +153,8 @@ main() {
     # 日付範囲の計算（JST）
     local start_date=$(TZ=Asia/Tokyo date -v-30d +%Y%m%d 2>/dev/null || TZ=Asia/Tokyo date -d '30 days ago' +%Y%m%d)
     local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
-    local output_file="${OUTPUT_DIR}/win_rates_${start_date}-${end_date}.json"
+    local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
+    local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
     
     log_info "対象期間: ${start_date} から ${end_date}"
     
@@ -183,31 +187,39 @@ main() {
 
     # ペアデータを出力
     log_info "ペアデータをエクスポートしています"
-    local pair_output_dir="${OUTPUT_DIR}/pair_stats_${start_date}-${end_date}"
     if ! python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
         log_error "ペアデータのエクスポートに失敗しました"
         exit 1
     fi
+
     if [[ ! -d "$pair_output_dir" ]]; then
         log_error "出力ディレクトリが見つかりません: $pair_output_dir"
         exit 1
     fi
+
     log_info "出力ディレクトリを生成しました: $pair_output_dir"
+
     if [[ -z $(find "$pair_output_dir" -type f -name '*.json') ]]; then
         log_warn "出力ディレクトリが空です: $pair_output_dir"
     fi
 
     # アプリディレクトリへのコピー
-    local destination="${APP_DIR}${COPY_PATH}"
-    log_info "ファイルをアプリケーションディレクトリにコピーしています: $destination"
+    local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
+    local destination_pair_stats="${APP_DIR}${COPY_PATH}${PAIR_STATS_DIR_NAME}"
+    log_info "ファイルをアプリケーションディレクトリにコピーしています"
 
-    if ! cp "$output_file" "$destination"; then
-        log_error "ファイルのコピーに失敗しました"
+    if ! cp "$output_file" "$destination_win_rate"; then
+        log_error "win_rateファイルのコピーに失敗しました"
+        exit 1
+    fi
+
+    if ! cp -r "$pair_output_dir" "$destination_pair_stats"; then
+        log_error "pair_statsフォルダのコピーに失敗しました"
         exit 1
     fi
 
     # Git操作
-    git_operations "$destination" "$end_date"
+    git_operations "$destination_win_rate" "$destination_pair_stats" "$end_date"
 
     # 古い出力ファイルのクリーンアップ（30日以上古いファイルを削除）
     find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +30 -delete 2>/dev/null || true
