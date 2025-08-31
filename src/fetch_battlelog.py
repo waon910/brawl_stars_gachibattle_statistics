@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from mysql.connector import IntegrityError, errorcode
 
 import mysql.connector
 import requests
@@ -264,14 +265,19 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                         (rank_log_id, map_id, rank_id),
                     )
-                except mysql.connector.IntegrityError as e:
+                except IntegrityError as e:
                     logger.warning(
                         "未登録のマップを検出: マップ=%s マップID=%s ランク=%s",
                         battle_map,
                         battle_map_id,
                         rank,
                     )
-                    logger.warning("Battle detail: %s error:%s", battle, e)
+                    logger.warning("Battle detail: %s error: %s", battle, e)
+                    if e.errno == errorcode.ER_DUP_ENTRY:  # 1062: Duplicate entry
+                        logger.debug("重複レコードなのでスキップ")
+                        new_rank_flag = False
+                        new_rank_brawlers_flag = False
+                        continue
                     mode_id = cur.execute("SELECT id FROM _modes WHERE name=%s", (battle_mode,)).fetchone()[0]
                     cur.execute(
                         "REPLACE INTO _maps(id, name, mode_id) VALUES (%s, %s, %s)",
@@ -307,7 +313,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                     "INSERT INTO battle_logs(id, rank_log_id) VALUES (%s, %s)",
                     (battle_log_id, rank_log_id),
                 )
-            except mysql.connector.IntegrityError:
+            except IntegrityError:
                 logger.debug(
                     "既に記録済みのバトルのためスキップ battle_log_id=%s rank_log_id=%s",
                     battle_log_id,
