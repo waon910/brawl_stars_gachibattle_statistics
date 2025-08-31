@@ -25,6 +25,16 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 
 出力されたファイルは `data/output` フォルダに保存され、ファイル名には取得した日付範囲が含まれます。ログは `data/logs` に保存され、`config/logging.yaml` で設定できます。
 
+## 対キャラ・協力勝率の出力
+
+`src/export_pair_stats.py` を実行すると、マップごとのキャラクター対キャラクター勝率と味方同士の相性を含む JSON を生成できます。
+
+```bash
+python -m src.export_pair_stats --output pair_stats.json
+```
+
+出力ファイル名は `--output` オプションで指定できます。
+
 ## GUIダッシュボード
 
 `streamlit` を用いてデータベースの統計情報をリアルタイムに表示するダッシュボードを提供します。
