@@ -6,6 +6,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
+from pathlib import Path
 
 import mysql.connector
 from scipy.stats import beta
@@ -131,7 +132,11 @@ def compute_pair_rates(rows: List[Tuple[int, int, int, float, float]], symmetric
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="対キャラ・協力勝率をJSONとして出力")
-    parser.add_argument("--output", default="pair_stats.json", help="出力先JSONファイル")
+    parser.add_argument(
+        "--output-dir",
+        default="pair_stats",
+        help="出力先ディレクトリ",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -159,9 +164,15 @@ def main() -> None:
     synergy_result = compute_pair_rates(synergy_rows, symmetrical=True)
     result = {"matchup": matchup_result, "synergy": synergy_result}
 
-    logging.info("JSONファイルに書き込んでいます: %s", args.output)
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+    base_dir = Path(args.output_dir)
+    logging.info("ディレクトリに分割して書き込んでいます: %s", base_dir)
+    for kind, maps in result.items():
+        kind_dir = base_dir / kind
+        kind_dir.mkdir(parents=True, exist_ok=True)
+        for map_id, data in maps.items():
+            out_file = kind_dir / f"{map_id}.json"
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
     logging.info("JSON出力が完了しました")
 
 

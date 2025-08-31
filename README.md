@@ -27,13 +27,13 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 
 ## 対キャラ・協力勝率の出力
 
-`src/export_pair_stats.py` を実行すると、マップごとのキャラクター対キャラクター勝率と味方同士の相性を含む JSON を生成できます。
+`src/export_pair_stats.py` を実行すると、対キャラ勝率(`matchup`)と味方同士の相性(`synergy`)をマップごとに分割した JSON として出力できます。
 
 ```bash
-python -m src.export_pair_stats --output pair_stats.json
+python -m src.export_pair_stats --output-dir pair_stats_output
 ```
 
-出力ファイル名は `--output` オプションで指定できます。
+`--output-dir` で指定したディレクトリ配下に `matchup/<map_id>.json` と `synergy/<map_id>.json` が生成されます。
 
 ## GUIダッシュボード
 
