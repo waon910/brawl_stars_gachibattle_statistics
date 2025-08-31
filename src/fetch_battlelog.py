@@ -27,7 +27,7 @@ MAX_RETRIES = 3
 # 集計開始日
 COL_BEFORE_DATE = 30
 # 取得サイクル時間
-ACQ_CYCLE_TIME = 5
+ACQ_CYCLE_TIME = 12
 # トロフィー境界
 TROPHIE_BORDER = 90000
 # 一度に取得するプレイヤー数
@@ -266,6 +266,11 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         (rank_log_id, map_id, rank_id),
                     )
                 except IntegrityError as e:
+                    if e.errno == errorcode.ER_DUP_ENTRY:  # 1062: Duplicate entry
+                        logger.info("重複レコードなのでスキップ")
+                        new_rank_flag = False
+                        new_rank_brawlers_flag = False
+                        continue
                     logger.warning(
                         "未登録のマップを検出: マップ=%s マップID=%s ランク=%s",
                         battle_map,
@@ -273,11 +278,6 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         rank,
                     )
                     logger.warning("Battle detail: %s error: %s", battle, e)
-                    if e.errno == errorcode.ER_DUP_ENTRY:  # 1062: Duplicate entry
-                        logger.debug("重複レコードなのでスキップ")
-                        new_rank_flag = False
-                        new_rank_brawlers_flag = False
-                        continue
                     mode_id = cur.execute("SELECT id FROM _modes WHERE name=%s", (battle_mode,)).fetchone()[0]
                     cur.execute(
                         "REPLACE INTO _maps(id, name, mode_id) VALUES (%s, %s, %s)",
