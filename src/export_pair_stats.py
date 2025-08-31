@@ -3,28 +3,22 @@
 import argparse
 import json
 import logging
-import random
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 import mysql.connector
+from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-
-SAMPLE_SIZE = 10000
-random.seed(0)
 setup_logging()
 JST = timezone(timedelta(hours=9))
 
 
-def beta_lcb(alpha: float, beta: float, confidence: float = 0.95) -> float:
-    """Beta分布の下側信頼限界をモンテカルロ法で近似する"""
-    samples = [random.betavariate(alpha, beta) for _ in range(SAMPLE_SIZE)]
-    samples.sort()
-    index = int((1 - confidence) * len(samples))
-    return samples[index]
+def beta_lcb(alpha: float, beta_param: float, confidence: float = 0.95) -> float:
+    """Beta分布の下側信頼限界を計算する"""
+    return beta.ppf(1 - confidence, alpha, beta_param)
 
 
 def fetch_matchup_stats(conn, since: str) -> List[Tuple[int, int, int, float, float]]:
