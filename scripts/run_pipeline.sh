@@ -175,24 +175,40 @@ main() {
     fi
     
     log_info "出力ファイルを生成しました: $output_file"
-    
+
     # ファイルサイズをチェック（空ファイルかどうか）
     if [[ ! -s "$output_file" ]]; then
         log_warn "出力ファイルが空です: $output_file"
     fi
-    
+
+    # ペアデータを出力
+    log_info "ペアデータをエクスポートしています"
+    local pair_output_dir="${OUTPUT_DIR}/pair_stats_${start_date}-${end_date}"
+    if ! python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
+        log_error "ペアデータのエクスポートに失敗しました"
+        exit 1
+    fi
+    if [[ ! -d "$pair_output_dir" ]]; then
+        log_error "出力ディレクトリが見つかりません: $pair_output_dir"
+        exit 1
+    fi
+    log_info "出力ディレクトリを生成しました: $pair_output_dir"
+    if [[ -z $(find "$pair_output_dir" -type f -name '*.json') ]]; then
+        log_warn "出力ディレクトリが空です: $pair_output_dir"
+    fi
+
     # アプリディレクトリへのコピー
     local destination="${APP_DIR}${COPY_PATH}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています: $destination"
-    
+
     if ! cp "$output_file" "$destination"; then
         log_error "ファイルのコピーに失敗しました"
         exit 1
     fi
-    
+
     # Git操作
     git_operations "$destination" "$end_date"
-    
+
     # 古い出力ファイルのクリーンアップ（30日以上古いファイルを削除）
     find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +30 -delete 2>/dev/null || true
     
