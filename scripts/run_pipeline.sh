@@ -213,7 +213,7 @@ main() {
         exit 1
     fi
 
-    if ! cp -r "$pair_output_dir" "$destination_pair_stats"; then
+    if ! rsync -av --delete "$pair_output_dir/" "$destination_pair_stats/"; then
         log_error "pair_statsフォルダのコピーに失敗しました"
         exit 1
     fi
