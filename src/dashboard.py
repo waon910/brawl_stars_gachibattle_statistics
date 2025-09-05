@@ -1,8 +1,6 @@
 from datetime import date, datetime, timedelta
 
-import mysql.connector
-
-from .db import get_connection
+from db import get_connection
 
 import pandas as pd
 import streamlit as st
