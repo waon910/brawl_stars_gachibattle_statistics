@@ -166,10 +166,13 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
         season_params = []
 
     with get_connection() as conn:
-        overall = conn.execute(
+        cursor = conn.cursor()
+
+        cursor.execute(
             f"SELECT COUNT(*) FROM battle_logs bl WHERE {season_cond}",
             season_params,
-        ).fetchone()[0]
+        )
+        overall = cursor.fetchone()[0]
 
         cond = season_cond
         params = season_params
@@ -177,12 +180,13 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
         if rank_id is not None:
             cond_rank = f"{cond} AND rl.rank_id=%s"
             params_rank = params + [rank_id]
-            rank_total = conn.execute(
+            cursor.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
                 "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
                 f"WHERE {cond_rank}",
                 params_rank,
-            ).fetchone()[0]
+            )
+            rank_total = cursor.fetchone()[0]
         else:
             cond_rank = cond
             params_rank = params
@@ -191,13 +195,14 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
         if mode_id is not None:
             cond_mode = f"{cond_rank} AND m.mode_id=%s"
             params_mode = params_rank + [mode_id]
-            mode_total = conn.execute(
+            cursor.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
                 "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
                 "JOIN _maps m ON rl.map_id = m.id "
                 f"WHERE {cond_mode}",
                 params_mode,
-            ).fetchone()[0]
+            )
+            mode_total = cursor.fetchone()[0]
         else:
             cond_mode = cond_rank
             params_mode = params_rank
@@ -206,15 +211,18 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
         if map_id is not None:
             cond_map = f"{cond_mode} AND rl.map_id=%s"
             params_map = params_mode + [map_id]
-            map_total = conn.execute(
+            cursor.execute(
                 f"SELECT COUNT(*) FROM battle_logs bl "
                 "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
                 "JOIN _maps m ON rl.map_id = m.id "
                 f"WHERE {cond_map}",
                 params_map,
-            ).fetchone()[0]
+            )
+            map_total = cursor.fetchone()[0]
         else:
             map_total = mode_total
+
+        cursor.close()
 
     return {"all": overall, "rank": rank_total, "mode": mode_total, "map": map_total}
 
