@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 
-from db import get_connection
+from db import get_connection, get_engine
 
 import pandas as pd
 import streamlit as st
@@ -46,7 +46,7 @@ def season_range(season: int) -> tuple[date, date]:
 
 def load_seasons() -> list[int]:
     """DBに存在するシーズン一覧を取得"""
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         dates = pd.read_sql_query(
             "SELECT DISTINCT SUBSTRING(id,1,8) AS date FROM battle_logs", conn
         )["date"]
@@ -56,11 +56,11 @@ def load_seasons() -> list[int]:
     return sorted(seasons)
 
 def load_modes():
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         return pd.read_sql_query("SELECT id, name_ja FROM _modes ORDER BY id", conn)
 
 def load_maps(mode_id):
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         return pd.read_sql_query(
             "SELECT id, name_ja FROM _maps WHERE mode_id=%s ORDER BY id",
             conn,
@@ -68,7 +68,7 @@ def load_maps(mode_id):
         )
 
 def load_ranks():
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         return pd.read_sql_query("SELECT id, name_ja FROM _ranks ORDER BY id", conn)
 
 def brawler_usage(
@@ -102,7 +102,7 @@ def brawler_usage(
         query += " AND rl.map_id=%s"
         params.append(map_id)
     query += " GROUP BY b.name_ja"
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         df = pd.read_sql_query(query, conn, params=params)
     total = df["count"].sum()
     if total > 0:
@@ -133,7 +133,7 @@ def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
     if map_id is not None:
         base += " AND rl.map_id=%s"
         params.append(map_id)
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         wins = pd.read_sql_query(
             "SELECT w.win_brawler_id AS brawler_id, COUNT(*) AS wins "
             + base
@@ -228,7 +228,7 @@ def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
 
 def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id=None):
     """指定した階層での対キャラ勝率を集計する"""
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         query = (
             "SELECT w.win_brawler_id, w.lose_brawler_id, COUNT(*) AS cnt "
             "FROM win_lose_logs w "
@@ -265,7 +265,7 @@ def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id
     merged = pd.concat([wins, losses], axis=1).fillna(0)
     merged["total"] = merged["wins"] + merged["losses"]
     merged["win_rate"] = (merged["wins"] / merged["total"]) * 100
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn).set_index("id")
     merged = merged.join(brawlers).reset_index().rename(
         columns={"index": "brawler_id", "name_ja": "opponent"}
@@ -338,7 +338,7 @@ def main():
         st.write("データがありません")
 
     st.header("対キャラ勝率")
-    with get_connection() as conn:
+    with get_engine().connect() as conn:
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
     brawler_name = st.selectbox("キャラ", brawlers["name_ja"])
     brawler_id = int(brawlers[brawlers["name_ja"] == brawler_name]["id"].iloc[0])
