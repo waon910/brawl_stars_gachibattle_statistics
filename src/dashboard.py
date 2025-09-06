@@ -103,7 +103,11 @@ def brawler_usage(
         params.append(map_id)
     query += " GROUP BY b.name_ja"
     with get_engine().connect() as conn:
-        df = pd.read_sql_query(query, conn, params=params)
+        df = pd.read_sql_query(
+            query,
+            conn,
+            params=tuple(params) if params else None,
+        )
     total = df["count"].sum()
     if total > 0:
         df["usage_rate"] = df["count"] / total * 100
@@ -139,14 +143,14 @@ def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
             + base
             + " GROUP BY w.win_brawler_id",
             conn,
-            params=params,
+            params=tuple(params) if params else None,
         )
         losses = pd.read_sql_query(
             "SELECT w.lose_brawler_id AS brawler_id, COUNT(*) AS losses "
             + base
             + " GROUP BY w.lose_brawler_id",
             conn,
-            params=params,
+            params=tuple(params) if params else None,
         )
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
     df = pd.merge(wins, losses, on="brawler_id", how="outer").fillna(0)
@@ -251,7 +255,11 @@ def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id
             query += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
             params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
         query += " GROUP BY w.win_brawler_id, w.lose_brawler_id"
-        df = pd.read_sql_query(query, conn, params=params)
+        df = pd.read_sql_query(
+            query,
+            conn,
+            params=tuple(params) if params else None,
+        )
     wins = (
         df[df["win_brawler_id"] == brawler_id]
         .set_index("lose_brawler_id")["cnt"]
