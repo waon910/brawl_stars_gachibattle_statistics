@@ -50,7 +50,6 @@ check_duplicate() {
             # 重複実行の場合はcleanupトラップを無効化してからexit
             trap - EXIT
             exit 1
-        fi
         else
             # 古いPIDファイルが残っている場合は削除
             log_info "古いPIDファイルを削除しています (PID: $old_pid は既に終了済み)"
