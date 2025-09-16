@@ -47,7 +47,14 @@ check_duplicate() {
         local old_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
         if [[ -n "$old_pid" ]] && ps -p "$old_pid" > /dev/null 2>&1; then
             log_warn "スクリプトが既に実行中です (PID: $old_pid)"
+            # 重複実行の場合はcleanupトラップを無効化してからexit
+            trap - EXIT
             exit 1
+        fi
+        else
+            # 古いPIDファイルが残っている場合は削除
+            log_info "古いPIDファイルを削除しています (PID: $old_pid は既に終了済み)"
+            rm -f "$PID_FILE"
         fi
     fi
     
@@ -160,14 +167,14 @@ main() {
     
     # バトルログを取得
     log_info "バトルログを取得しています"
-    if ! python -m src.fetch_battlelog; then
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.fetch_battlelog; then
         log_error "バトルログの取得に失敗しました"
         exit 1
     fi
 
     # 勝率データを出力
     log_info "勝率データをエクスポートしています"
-    if ! python -m src.export_win_rates --output "$output_file"; then
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_win_rates --output "$output_file"; then
         log_error "勝率データのエクスポートに失敗しました"
         exit 1
     fi
@@ -187,7 +194,7 @@ main() {
 
     # ペアデータを出力
     log_info "ペアデータをエクスポートしています"
-    if ! python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
         log_error "ペアデータのエクスポートに失敗しました"
         exit 1
     fi
