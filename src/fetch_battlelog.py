@@ -107,9 +107,10 @@ def cleanup_old_logs(conn) -> int:
     conn.commit()
     return len(old_rank_ids)
 
-def fetch_rank_player(api_key: str, conn) -> set[str]:
+def fetch_rank_player(api_key: str, conn) -> int:
     """ランク上位プレイヤーを取得してDBへ保存"""
     cur = conn.cursor()
+    new_players = 0
 
     for code in COUNTRY_CODE:
         url = f"https://api.brawlstars.com/v1/rankings/{code}/players"
@@ -145,13 +146,20 @@ def fetch_rank_player(api_key: str, conn) -> set[str]:
                 "INSERT IGNORE INTO players(tag) VALUES (%s)",
                 tags_to_insert,
             )
-        
+            if cur.rowcount > 0:
+                new_players += cur.rowcount
+
         logger.info("国コード:%s 取得プレイヤー数 %d", code, count)
         conn.commit()
 
+    return new_players
 
-def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
+
+def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
     """指定したプレイヤーのバトルログを取得してDBへ保存"""
+    new_players = 0
+    new_rank_logs = 0
+    new_battle_logs = 0
     with get_connection() as conn:
         cur = conn.cursor()
         tag_enc = quote(player_tag, safe="")
@@ -168,18 +176,18 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                 (player_tag,),
             )
             logger.warning("プレイヤーが見つかりません: %s", player_tag)
-            return set()
+            return (new_players, new_rank_logs, new_battle_logs)
 
         try:
             data = resp.json()
         except json.JSONDecodeError as e:
             logger.error("JSON の解析に失敗しました: %s", e)
-            return set()
+            return (new_players, new_rank_logs, new_battle_logs)
 
         battle_logs = data.get("items", [])
         if len(battle_logs) < 1:
             logger.info("バトルログが見つかりませんでした。")
-            return set()
+            return (new_players, new_rank_logs, new_battle_logs)
 
         cur.execute(
             "UPDATE players SET last_fetched=%s WHERE tag=%s",
@@ -245,6 +253,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                     if 18 < trophies <= 22:
                         cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                         if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
+                            new_players += 1
                             logger.info("マスターランク発見:%s", p_tag)
                     if rank < trophies <= 22:
                         rank = trophies
@@ -265,6 +274,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                         (rank_log_id, map_id, rank_id),
                     )
+                    if cur.rowcount > 0:
+                        new_rank_logs += cur.rowcount
                 except IntegrityError as e:
                     if e.errno == errorcode.ER_DUP_ENTRY:  # 1062: Duplicate entry
                         logger.info("重複レコードなのでスキップ")
@@ -288,6 +299,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                         "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
                         (rank_log_id, map_id, rank_id),
                     )
+                    if cur.rowcount > 0:
+                        new_rank_logs += cur.rowcount
                 for rlog in resultInfo:
                     for brawler_id in rlog.brawlers:
                         cur.execute(
@@ -313,6 +326,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                     "INSERT INTO battle_logs(id, rank_log_id) VALUES (%s, %s)",
                     (battle_log_id, rank_log_id),
                 )
+                if cur.rowcount > 0:
+                    new_battle_logs += cur.rowcount
             except IntegrityError:
                 logger.debug(
                     "既に記録済みのバトルのためスキップ battle_log_id=%s rank_log_id=%s",
@@ -329,8 +344,9 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> set[str]:
                     "INSERT IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (%s, %s, %s)",
                     list(pairs),
                 )
-                    
+
         conn.commit()
+        return (new_players, new_rank_logs, new_battle_logs)
             
 
 def main() -> None:
@@ -351,7 +367,11 @@ def main() -> None:
 
             start_time = time.time()
 
-            fetch_rank_player(api_key, conn)
+            new_players_total = 0
+            new_rank_logs_total = 0
+            new_battle_logs_total = 0
+
+            new_players_total += fetch_rank_player(api_key, conn)
             rest = 0
 
             try:
@@ -371,7 +391,11 @@ def main() -> None:
                         break
 
                     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                        executor.map(lambda t: fetch_battle_logs(t, api_key), tags)
+                        results = executor.map(lambda t: fetch_battle_logs(t, api_key), tags)
+                        for players_added, rank_added, battles_added in results:
+                            new_players_total += players_added
+                            new_rank_logs_total += rank_added
+                            new_battle_logs_total += battles_added
 
                     cur.execute(
                         "SELECT COUNT(*) FROM players WHERE last_fetched < %s",
@@ -405,6 +429,9 @@ def main() -> None:
         logger.error("データベース接続エラー: %s", e)
         return
     logger.info("バトルログの取得が完了しました。")
+    logger.info("新規登録プレイヤー:%d", new_players_total)
+    logger.info("新規登録ランクマッチ:%d", new_rank_logs_total)
+    logger.info("新規登録バトル:%d", new_battle_logs_total)
 
 def format_time(seconds):
     """秒を時:分:秒の形式に変換"""
