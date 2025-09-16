@@ -6,6 +6,26 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PIPELINE_SCRIPT="${SCRIPT_DIR}/run_pipeline.sh"
+ENV_FILE="${BASE_DIR}/config/settings.env"
+LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
+# 設定ファイルが読み込めなかった場合のフォールバック値
+DEFAULT_RETENTION_DAYS=30
+RETENTION_DAYS="$DEFAULT_RETENTION_DAYS"
+
+# =============================================================================
+# 環境変数の読み込み
+# =============================================================================
+load_env_files() {
+    if [[ -f "$ENV_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$ENV_FILE"
+    fi
+    if [[ -f "$LOCAL_ENV_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$LOCAL_ENV_FILE"
+    fi
+    RETENTION_DAYS="${DATA_RETENTION_DAYS:-$DEFAULT_RETENTION_DAYS}"
+}
 
 # =============================================================================
 # cron設定の追加
@@ -68,7 +88,7 @@ setup_logrotate() {
 ${BASE_DIR}/data/logs/*.log {
     daily
     missingok
-    rotate 30
+    rotate ${RETENTION_DAYS}
     compress
     delaycompress
     notifempty
@@ -163,7 +183,9 @@ main() {
     echo "  Brawl Stars パイプライン セットアップ"
     echo "=========================================="
     echo ""
-    
+
+    load_env_files
+
     # システム要件チェック
     check_requirements
     echo ""
