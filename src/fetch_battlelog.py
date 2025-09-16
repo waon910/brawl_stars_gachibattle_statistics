@@ -188,6 +188,14 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             return (new_players, new_rank_logs, new_battle_logs)
 
         cur.execute(
+            "SELECT name, highest_rank FROM players WHERE tag=%s",
+            (player_tag,),
+        )
+        row = cur.fetchone()
+        player_name_in_db = (row[0] if row and row[0] else None)
+        player_highest_rank = row[1] if row and row[1] is not None else 0
+
+        cur.execute(
             "UPDATE players SET last_fetched=%s WHERE tag=%s",
             (datetime.now(JST), player_tag),
         )
@@ -240,19 +248,46 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                 for player in team:
                     resultLog.brawlers.append(player.get("brawler", {}).get("id", "不明"))
                     p_tag = player.get("tag")
+                    player_name = player.get("name")
                     trophies = player.get("brawler", {}).get("trophies", 0)
                     if p_tag == player_tag:
                         my_side_idx = side_idx
                         resultLog.result = result
+                        update_fields: list[str] = []
+                        update_values: list[object] = []
+                        if player_name and not player_name_in_db:
+                            update_fields.append("name=%s")
+                            update_values.append(player_name)
+                            player_name_in_db = player_name
+                        if trophies is not None and trophies > player_highest_rank:
+                            update_fields.append("highest_rank=%s")
+                            update_values.append(trophies)
+                            player_highest_rank = trophies
+                        if update_fields:
+                            update_values.append(player_tag)
+                            cur.execute(
+                                f"UPDATE players SET {', '.join(update_fields)} WHERE tag=%s",
+                                update_values,
+                            )
                         # if trophies < 7:
                         #     cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
                         #     if cur.rowcount == 1:  # 削除されたら1、既に存在しなかったら0
                         #         logger.info("プレイヤー削除:%s", player_tag)
-                    if 18 < trophies <= 22:
+                    if p_tag and 18 < trophies <= 22:
                         cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                         if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
                             new_players += 1
                             logger.info("マスターランク発見:%s", p_tag)
+                        if player_name:
+                            cur.execute(
+                                "UPDATE players SET name=%s WHERE tag=%s AND (name IS NULL OR name='')",
+                                (player_name, p_tag),
+                            )
+                        if trophies is not None:
+                            cur.execute(
+                                "UPDATE players SET highest_rank=%s WHERE tag=%s AND highest_rank < %s",
+                                (trophies, p_tag, trophies),
+                            )
                     if rank < trophies <= 22:
                         rank = trophies
                 resultInfo.append(resultLog)
