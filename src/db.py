@@ -1,10 +1,13 @@
 import os
+
 import mysql.connector
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
+from .settings import load_environment
+
+
 def get_connection():
-    load_dotenv(dotenv_path=".env.local")
+    load_environment()
     return mysql.connector.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         user=os.getenv("MYSQL_USER", "root"),
@@ -15,7 +18,7 @@ def get_connection():
 
 
 def get_engine():
-    load_dotenv(dotenv_path=".env.local")
+    load_environment()
     user = os.getenv("MYSQL_USER", "root")
     password = os.getenv("MYSQL_PASSWORD", "")
     host = os.getenv("MYSQL_HOST", "localhost")

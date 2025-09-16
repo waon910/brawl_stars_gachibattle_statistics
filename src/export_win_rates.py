@@ -1,6 +1,6 @@
 """マップIDごとのキャラクタータグ勝率をJSON形式で出力するスクリプト.
 
-過去30日間に行われたダイヤモンドランク以上の試合を対象とし、
+設定された日数の範囲で行われたダイヤモンドランク以上の試合を対象とし、
 勝率はEmpirical Bayes(Beta-Binomial)による縮約と95%下側信頼区間(LCB)で算出する。
 """
 
@@ -16,6 +16,7 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
+from .settings import DATA_RETENTION_DAYS
 
 # Monte Carloサンプリング数
 SAMPLE_SIZE = 10000
@@ -121,7 +122,8 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     jst_now = datetime.now(timezone(timedelta(hours=9)))
-    since = (jst_now - timedelta(days=30)).strftime("%Y%m%d")
+    since = (jst_now - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
+    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
     logging.info("データベースに接続しています")
     try:
         conn = get_connection()
