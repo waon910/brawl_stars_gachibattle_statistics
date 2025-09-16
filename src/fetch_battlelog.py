@@ -11,7 +11,6 @@ from mysql.connector import IntegrityError, errorcode
 import mysql.connector
 import requests
 from dateutil.parser import parse
-from dotenv import load_dotenv
 from urllib.parse import quote
 
 from .country_code import COUNTRY_CODE
@@ -19,13 +18,12 @@ from .db import get_connection
 from .map import MAP_NAME_TO_ID
 from .rank import RANK_TO_ID
 from .logging_config import setup_logging
+from .settings import DATA_RETENTION_DAYS, load_environment
 
 # リクエスト間隔（秒）
 REQUEST_INTERVAL = 0.01
 # 最大リトライ回数
 MAX_RETRIES = 3
-# 集計開始日
-COL_BEFORE_DATE = 30
 # 取得サイクル時間
 ACQ_CYCLE_TIME = 10
 # トロフィー境界
@@ -84,9 +82,9 @@ def request_with_retry(
 
 
 def cleanup_old_logs(conn) -> int:
-    """30日前より前のログデータを削除"""
+    """設定された日数より前のログデータを削除"""
     cur = conn.cursor()
-    threshold = (datetime.now(JST) - timedelta(days=COL_BEFORE_DATE)).strftime("%Y%m%d")
+    threshold = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
     cur.execute("SELECT id FROM rank_logs WHERE SUBSTRING(id, 1, 8) < %s", (threshold,))
     old_rank_ids = [row[0] for row in cur.fetchall()]
     if not old_rank_ids:
@@ -208,7 +206,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             battle_map = battle.get("event", {}).get("map", "不明")
             battle_time = battle.get("battleTime", "不明")
             battle_datetime = parse(battle_time).astimezone(JST)
-            col_start_date = datetime.now(JST) - timedelta(days=COL_BEFORE_DATE)
+            col_start_date = datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)
             if battle_datetime < col_start_date:
                 continue
             star_player = battle_detail.get("starPlayer") or {}
@@ -354,11 +352,12 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    load_dotenv(dotenv_path=".env.local")
+    load_environment()
 
     api_key = os.getenv("BRAWL_STARS_API_KEY")
     if not api_key:
         raise RuntimeError("環境変数 BRAWL_STARS_API_KEY が設定されていません。")
+    logger.info("データ保持期間（日数）: %d", DATA_RETENTION_DAYS)
     try:
         with get_connection() as conn:
     

@@ -13,6 +13,11 @@ COPY_PATH="/lib/map-meta/"
 WIN_RATE_FILE_NAME="win_rates.json"
 PAIR_STATS_DIR_NAME="pair_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
+ENV_FILE="${BASE_DIR}/config/settings.env"
+LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
+# 設定ファイルが読み込めなかった場合のフォールバック値
+DEFAULT_RETENTION_DAYS=30
+RETENTION_DAYS="$DEFAULT_RETENTION_DAYS"
 
 # ログ設定
 LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d%H%M').log"
@@ -20,9 +25,21 @@ LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d%H%M').log"
 # =============================================================================
 # 初期設定
 # =============================================================================
+load_env_files() {
+    if [[ -f "$ENV_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$ENV_FILE"
+    fi
+    if [[ -f "$LOCAL_ENV_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$LOCAL_ENV_FILE"
+    fi
+    RETENTION_DAYS="${DATA_RETENTION_DAYS:-$DEFAULT_RETENTION_DAYS}"
+}
+
 setup() {
     mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
-    find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true
+    find "$LOG_DIR" -name "*.log" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
     exec > >(tee -a "$LOG_FILE") 2>&1
 }
 
@@ -142,10 +159,13 @@ git_operations() {
 # メイン処理
 # =============================================================================
 main() {
+    load_env_files
+
     # 初期設定
     setup
 
     log_info "Brawl Starsデータパイプラインを開始します"
+    log_info "データ保持期間（日数）: ${RETENTION_DAYS}"
     
     # 重複実行チェック
     check_duplicate
@@ -157,7 +177,7 @@ main() {
     }
     
     # 日付範囲の計算（JST）
-    local start_date=$(TZ=Asia/Tokyo date -v-30d +%Y%m%d 2>/dev/null || TZ=Asia/Tokyo date -d '30 days ago' +%Y%m%d)
+    local start_date=$(TZ=Asia/Tokyo date -v-"${RETENTION_DAYS}"d +%Y%m%d 2>/dev/null || TZ=Asia/Tokyo date -d "${RETENTION_DAYS} days ago" +%Y%m%d)
     local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
     local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
@@ -227,8 +247,8 @@ main() {
     # Git操作
     git_operations "$destination_win_rate" "$destination_pair_stats" "$end_date"
 
-    # 古い出力ファイルのクリーンアップ（30日以上古いファイルを削除）
-    find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +30 -delete 2>/dev/null || true
+    # 古い出力ファイルのクリーンアップ（設定期間より古いファイルを削除）
+    find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
     
     log_info "アプリケーションの更新が正常に完了しました"
 }
