@@ -18,6 +18,7 @@ LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
 # 設定ファイルが読み込めなかった場合のフォールバック値
 DEFAULT_RETENTION_DAYS=30
 RETENTION_DAYS="$DEFAULT_RETENTION_DAYS"
+START_TIME=0
 
 # ログ設定
 LOG_FILE="${LOG_DIR}/$(date '+%Y%m%d%H%M').log"
@@ -83,16 +84,27 @@ check_duplicate() {
 # =============================================================================
 cleanup() {
     local exit_code=$?
-    
+
     # PIDファイルを削除
     rm -f "$PID_FILE"
-    
+
     if [[ $exit_code -eq 0 ]]; then
         log_info "パイプラインが正常に完了しました"
     else
         log_error "パイプラインが失敗しました (終了コード: $exit_code)"
     fi
-    
+
+    if (( START_TIME > 0 )); then
+        local end_time elapsed hours minutes seconds elapsed_str
+        end_time=$(date +%s)
+        elapsed=$((end_time - START_TIME))
+        hours=$((elapsed / 3600))
+        minutes=$(((elapsed % 3600) / 60))
+        seconds=$((elapsed % 60))
+        printf -v elapsed_str '%02d時間%02d分%02d秒' "$hours" "$minutes" "$seconds"
+        log_info "総処理時間: ${elapsed_str} (${elapsed}秒)"
+    fi
+
     exit $exit_code
 }
 trap cleanup EXIT
@@ -159,6 +171,8 @@ git_operations() {
 # メイン処理
 # =============================================================================
 main() {
+    START_TIME=$(date +%s)
+
     load_env_files
 
     # 初期設定
