@@ -13,6 +13,7 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
+from .settings import DATA_RETENTION_DAYS
 setup_logging()
 JST = timezone(timedelta(hours=9))
 
@@ -140,7 +141,8 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    since = (datetime.now(JST) - timedelta(days=30)).strftime("%Y%m%d")
+    since = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
+    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
 
     logging.info("データベースに接続しています")
     try:

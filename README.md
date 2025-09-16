@@ -25,6 +25,10 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 
 出力されたファイルは `data/output` フォルダに保存され、ファイル名には取得した日付範囲が含まれます。ログは `data/logs` に保存され、`config/logging.yaml` で設定できます。
 
+## 共通設定
+
+データの保存期間などの共通設定値は `config/settings.env` で管理しています。デフォルトでは `DATA_RETENTION_DAYS=30` として30日分のデータを扱います。保持期間を変更したい場合はこの値を編集するだけで、Pythonスクリプトとシェルスクリプトの両方に反映されます。
+
 ## 対キャラ・協力勝率の出力
 
 `src/export_pair_stats.py` を実行すると、対キャラ勝率(`matchup`)と味方同士の相性(`synergy`)をマップごとに分割した JSON として出力できます。
