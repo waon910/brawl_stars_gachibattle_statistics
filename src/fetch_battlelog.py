@@ -27,7 +27,7 @@ MAX_RETRIES = 3
 # 集計開始日
 COL_BEFORE_DATE = 30
 # 取得サイクル時間
-ACQ_CYCLE_TIME = 10
+ACQ_CYCLE_TIME = 6
 # トロフィー境界
 TROPHIE_BORDER = 90000
 # 一度に取得するプレイヤー数
