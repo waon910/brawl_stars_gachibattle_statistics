@@ -93,6 +93,8 @@ REPLACE INTO _brawlers(id, name_ja) VALUES (16000093, 'ジェヨン');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000094, 'カゼ');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000095, 'アリー');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000096, 'トランク');
+REPLACE INTO _brawlers(id, name_ja) VALUES (16000097, 'ミナ');
+REPLACE INTO _brawlers(id, name_ja) VALUES (16000098, 'ジギー');
 
 -- modes
 REPLACE INTO _modes(id, name, name_ja) VALUES (2, 'gemGrab', 'エメラルドハント');
