@@ -12,6 +12,7 @@ APP_DIR="/Users/shunsukeiwao/develop/brawl_stars_gachibattle_app"
 COPY_PATH="/lib/map-meta/"
 WIN_RATE_FILE_NAME="win_rates.json"
 PAIR_STATS_DIR_NAME="pair_stats"
+TRIO_STATS_DIR_NAME="trio_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 ENV_FILE="${BASE_DIR}/config/settings.env"
 LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
@@ -127,7 +128,8 @@ trap 'handle_error ${LINENO} "$BASH_COMMAND" $?' ERR
 git_operations() {
     local win_rates_path="$1"
     local pair_stats_path="$2"
-    local end_date="$3"
+    local trio_stats_path="$3"
+    local end_date="$4"
     
     log_info "Git操作を開始しています"
     
@@ -195,6 +197,7 @@ main() {
     local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
     local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
+    local trio_output_dir="${OUTPUT_DIR}/${TRIO_STATS_DIR_NAME}"
     
     log_info "対象期間: ${start_date} から ${end_date}"
     
@@ -243,9 +246,28 @@ main() {
         log_warn "出力ディレクトリが空です: $pair_output_dir"
     fi
 
+    # トリオデータを出力
+    log_info "トリオデータをエクスポートしています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_trio_stats --output-dir "$trio_output_dir"; then
+        log_error "トリオデータのエクスポートに失敗しました"
+        exit 1
+    fi
+
+    if [[ ! -d "$trio_output_dir" ]]; then
+        log_error "出力ディレクトリが見つかりません: $trio_output_dir"
+        exit 1
+    fi
+
+    log_info "出力ディレクトリを生成しました: $trio_output_dir"
+
+    if [[ -z $(find "$trio_output_dir" -type f -name '*.json') ]]; then
+        log_warn "出力ディレクトリが空です: $trio_output_dir"
+    fi
+
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_pair_stats="${APP_DIR}${COPY_PATH}${PAIR_STATS_DIR_NAME}"
+    local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています"
 
     if ! cp "$output_file" "$destination_win_rate"; then
@@ -258,8 +280,13 @@ main() {
         exit 1
     fi
 
+    if ! rsync -av --delete "$trio_output_dir/" "$destination_trio_stats/"; then
+        log_error "trio_statsフォルダのコピーに失敗しました"
+        exit 1
+    fi
+
     # Git操作
-    git_operations "$destination_win_rate" "$destination_pair_stats" "$end_date"
+    git_operations "$destination_win_rate" "$destination_pair_stats" "$destination_trio_stats" "$end_date"
 
     # 古い出力ファイルのクリーンアップ（設定期間より古いファイルを削除）
     find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true

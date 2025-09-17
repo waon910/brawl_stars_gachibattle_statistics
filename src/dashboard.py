@@ -1,9 +1,12 @@
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 from db import get_connection, get_engine
 
 import pandas as pd
 import streamlit as st
+
+from trio_stats import compute_trio_scores, fetch_trio_rows
 
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -70,6 +73,11 @@ def load_maps(mode_id):
 def load_ranks():
     with get_engine().connect() as conn:
         return pd.read_sql_query("SELECT id, name_ja FROM _ranks ORDER BY id", conn)
+
+
+def load_brawlers():
+    with get_engine().connect() as conn:
+        return pd.read_sql_query("SELECT id, name_ja FROM _brawlers ORDER BY id", conn)
 
 def brawler_usage(
     season_id=None, rank_id=None, mode_id=None, map_id=None
@@ -281,6 +289,70 @@ def matchup_rates(brawler_id, season_id=None, rank_id=None, mode_id=None, map_id
     return merged[["opponent", "wins", "losses", "win_rate"]].sort_values(
         "win_rate", ascending=False
     )
+
+
+def trio_recommendations(
+    brawler_names: dict[int, str],
+    *,
+    season_id: Optional[int],
+    rank_id: Optional[int],
+    mode_id: Optional[int],
+    map_id: Optional[int],
+    top_n: int,
+    min_games: int,
+) -> pd.DataFrame:
+    """フィルター条件に基づくおすすめトリオ編成を取得する."""
+
+    if map_id is None:
+        return pd.DataFrame()
+
+    since: Optional[str] = None
+    until: Optional[str] = None
+    if season_id is not None:
+        start, next_start = season_range(season_id)
+        since = start.strftime("%Y%m%d")
+        until = next_start.strftime("%Y%m%d")
+
+    with get_connection() as conn:
+        rows = fetch_trio_rows(
+            conn,
+            since=since,
+            until=until,
+            rank_id=rank_id,
+            mode_id=mode_id,
+            map_id=map_id,
+        )
+
+    if not rows:
+        return pd.DataFrame()
+
+    group_by_rank = rank_id is not None
+    results = compute_trio_scores(
+        rows,
+        group_by_rank=group_by_rank,
+        min_games=min_games,
+    )
+    rank_key = rank_id if group_by_rank else None
+    combos = results.get(map_id, {}).get(rank_key, [])
+    if not combos:
+        return pd.DataFrame()
+
+    records: list[dict[str, object]] = []
+    for combo in combos[:top_n]:
+        names = [brawler_names.get(b_id, str(b_id)) for b_id in combo["brawlers"]]
+        records.append(
+            {
+                "編成": " / ".join(names),
+                "勝率(%)": round(combo["win_rate"] * 100, 2),
+                "勝率LCB(%)": round(combo["win_rate_lcb"] * 100, 2),
+                "勝利": combo["wins"],
+                "敗北": combo["losses"],
+                "試合数": combo["games"],
+            }
+        )
+
+    columns = ["編成", "勝率(%)", "勝率LCB(%)", "勝利", "敗北", "試合数"]
+    return pd.DataFrame(records, columns=columns)
 def main():
     st.title("Brawl Stars 統計ダッシュボード")
     st.caption("データベースをリアルタイムで監視")
@@ -320,6 +392,9 @@ def main():
     else:
         map_id = int(maps[maps["name_ja"] == map_name]["id"].iloc[0])
 
+    brawlers = load_brawlers()
+    brawler_names = dict(zip(brawlers["id"], brawlers["name_ja"]))
+
     counts = battle_counts(
         season_id=season_id, rank_id=rank_id, mode_id=mode_id, map_id=map_id
     )
@@ -345,9 +420,30 @@ def main():
     else:
         st.write("データがありません")
 
+    st.header("おすすめ編成トップN")
+    if map_id is None:
+        st.info("マップを選択するとおすすめトリオが表示されます")
+    else:
+        col_top, col_games = st.columns(2)
+        with col_top:
+            top_n = st.slider("表示数", min_value=5, max_value=30, value=10, step=5)
+        with col_games:
+            min_games = st.slider("最低試合数", min_value=1, max_value=50, value=5, step=1)
+        trio_df = trio_recommendations(
+            brawler_names,
+            season_id=season_id,
+            rank_id=rank_id,
+            mode_id=mode_id,
+            map_id=map_id,
+            top_n=top_n,
+            min_games=min_games,
+        )
+        if trio_df.empty:
+            st.write("データがありません")
+        else:
+            st.dataframe(trio_df, hide_index=True)
+
     st.header("対キャラ勝率")
-    with get_engine().connect() as conn:
-        brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
     brawler_name = st.selectbox("キャラ", brawlers["name_ja"])
     brawler_id = int(brawlers[brawlers["name_ja"] == brawler_name]["id"].iloc[0])
     match_df = matchup_rates(
