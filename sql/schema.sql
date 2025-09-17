@@ -49,6 +49,13 @@ CREATE TABLE IF NOT EXISTS rank_logs (
     FOREIGN KEY (rank_id) REFERENCES _ranks(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS rank_star_logs (
+    rank_log_id VARCHAR(50) PRIMARY KEY,
+    star_brawler_id INT NOT NULL,
+    FOREIGN KEY (rank_log_id) REFERENCES rank_logs(id) ON DELETE CASCADE,
+    FOREIGN KEY (star_brawler_id) REFERENCES _brawlers(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS battle_logs (
     id VARCHAR(100) PRIMARY KEY,
     rank_log_id VARCHAR(50) NOT NULL,
@@ -67,5 +74,6 @@ CREATE TABLE IF NOT EXISTS win_lose_logs (
 
 CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
 CREATE INDEX idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
+CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs(star_brawler_id);
 CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
 
