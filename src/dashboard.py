@@ -167,6 +167,54 @@ def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
     df = df.merge(brawlers, left_on="brawler_id", right_on="id").drop("id", axis=1)
     return df.rename(columns={"name_ja": "brawler"}).sort_values("win_rate", ascending=False)
 
+
+def brawler_star_rate(season_id=None, rank_id=None, mode_id=None, map_id=None) -> pd.DataFrame:
+    """指定した階層でのスター率を集計する"""
+    conditions = ["1=1"]
+    params: list = []
+    if season_id is not None:
+        start, next_start = season_range(season_id)
+        conditions.append("SUBSTRING(rl.id,1,8) >= %s")
+        conditions.append("SUBSTRING(rl.id,1,8) < %s")
+        params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
+    if rank_id is not None:
+        conditions.append("rl.rank_id=%s")
+        params.append(rank_id)
+    if mode_id is not None:
+        conditions.append("m.mode_id=%s")
+        params.append(mode_id)
+    if map_id is not None:
+        conditions.append("rl.map_id=%s")
+        params.append(map_id)
+    where_clause = " AND ".join(conditions)
+    params_tuple = tuple(params) if params else None
+
+    with get_engine().connect() as conn:
+        star_query = (
+            "SELECT b.name_ja AS brawler, COUNT(*) AS star_count "
+            "FROM rank_star_logs rsl "
+            "JOIN rank_logs rl ON rsl.rank_log_id = rl.id "
+            "JOIN _maps m ON rl.map_id = m.id "
+            "JOIN _brawlers b ON rsl.star_brawler_id = b.id "
+            f"WHERE {where_clause} GROUP BY b.name_ja"
+        )
+        star_df = pd.read_sql_query(star_query, conn, params=params_tuple)
+
+        total_query = (
+            "SELECT COUNT(*) AS total_matches "
+            "FROM rank_logs rl "
+            "JOIN _maps m ON rl.map_id = m.id "
+            f"WHERE {where_clause}"
+        )
+        total_df = pd.read_sql_query(total_query, conn, params=params_tuple)
+
+    total_matches = int(total_df["total_matches"].iloc[0]) if not total_df.empty else 0
+    if total_matches == 0 or star_df.empty:
+        return pd.DataFrame(columns=["brawler", "star_count", "star_rate"])
+
+    star_df["star_rate"] = (star_df["star_count"] / total_matches) * 100
+    return star_df.sort_values("star_rate", ascending=False)
+
 def battle_counts(season_id=None, rank_id=None, mode_id=None, map_id=None):
     """各階層での対戦数を取得する"""
     if season_id is not None:
@@ -417,6 +465,16 @@ def main():
     )
     if not win_df.empty:
         st.bar_chart(win_df.set_index("brawler")["win_rate"])
+    else:
+        st.write("データがありません")
+
+    st.header("スター率")
+    star_df = brawler_star_rate(
+        season_id=season_id, rank_id=rank_id, mode_id=mode_id, map_id=map_id
+    )
+    if not star_df.empty:
+        st.bar_chart(star_df.set_index("brawler")["star_rate"])
+        st.dataframe(star_df, hide_index=True)
     else:
         st.write("データがありません")
 

@@ -219,6 +219,11 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                 continue
             star_player = battle_detail.get("starPlayer") or {}
             star_tag = star_player.get("tag")
+            star_brawler_id = (
+                star_player.get("brawler", {}).get("id")
+                if isinstance(star_player.get("brawler"), dict)
+                else None
+            )
             if star_tag:
                 new_rank_flag = True
                 rank_log_id = f"{battle_time}_{star_tag}"
@@ -302,6 +307,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                 rank_id = RANK_TO_ID.get(rank)
                 rank_log_id = f"{battle_time}_{star_tag}"
                 #新規ランクマッチ登録
+                inserted_rank_log = False
                 try:
                     cur.execute(
                         "INSERT INTO rank_logs(id, map_id, rank_id) VALUES (%s, %s, %s)",
@@ -309,6 +315,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                     )
                     if cur.rowcount > 0:
                         new_rank_logs += cur.rowcount
+                        inserted_rank_log = True
                 except IntegrityError as e:
                     if e.errno == errorcode.ER_DUP_ENTRY:  # 1062: Duplicate entry
                         logger.info("重複レコードなのでスキップ")
@@ -334,6 +341,13 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                     )
                     if cur.rowcount > 0:
                         new_rank_logs += cur.rowcount
+                        inserted_rank_log = True
+                if inserted_rank_log and star_brawler_id:
+                    cur.execute(
+                        "INSERT INTO rank_star_logs(rank_log_id, star_brawler_id) VALUES (%s, %s) "
+                        "ON DUPLICATE KEY UPDATE star_brawler_id=VALUES(star_brawler_id)",
+                        (rank_log_id, star_brawler_id),
+                    )
                 for rlog in resultInfo:
                     for brawler_id in rlog.brawlers:
                         cur.execute(
