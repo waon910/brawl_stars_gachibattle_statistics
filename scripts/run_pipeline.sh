@@ -11,6 +11,7 @@ LOG_DIR="${BASE_DIR}/data/logs"
 APP_DIR="/Users/shunsukeiwao/develop/brawl_stars_gachibattle_app"
 COPY_PATH="/lib/map-meta/"
 WIN_RATE_FILE_NAME="win_rates.json"
+STAR_RATE_FILE_NAME="star_rates.json"
 PAIR_STATS_DIR_NAME="pair_stats"
 TRIO_STATS_DIR_NAME="trio_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
@@ -127,9 +128,10 @@ trap 'handle_error ${LINENO} "$BASH_COMMAND" $?' ERR
 # =============================================================================
 git_operations() {
     local win_rates_path="$1"
-    local pair_stats_path="$2"
-    local trio_stats_path="$3"
-    local end_date="$4"
+    local star_rates_path="$2"
+    local pair_stats_path="$3"
+    local trio_stats_path="$4"
+    local end_date="$5"
     
     log_info "Git操作を開始しています"
     
@@ -196,6 +198,7 @@ main() {
     local start_date=$(TZ=Asia/Tokyo date -v-"${RETENTION_DAYS}"d +%Y%m%d 2>/dev/null || TZ=Asia/Tokyo date -d "${RETENTION_DAYS} days ago" +%Y%m%d)
     local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
     local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
+    local star_output_file="${OUTPUT_DIR}/${STAR_RATE_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
     local trio_output_dir="${OUTPUT_DIR}/${TRIO_STATS_DIR_NAME}"
     
@@ -226,6 +229,24 @@ main() {
     # ファイルサイズをチェック（空ファイルかどうか）
     if [[ ! -s "$output_file" ]]; then
         log_warn "出力ファイルが空です: $output_file"
+    fi
+
+    # スターデータを出力
+    log_info "スター取得データをエクスポートしています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_star_rates --output "$star_output_file"; then
+        log_error "スター取得データのエクスポートに失敗しました"
+        exit 1
+    fi
+
+    if [[ ! -f "$star_output_file" ]]; then
+        log_error "出力ファイルが見つかりません: $star_output_file"
+        exit 1
+    fi
+
+    log_info "出力ファイルを生成しました: $star_output_file"
+
+    if [[ ! -s "$star_output_file" ]]; then
+        log_warn "出力ファイルが空です: $star_output_file"
     fi
 
     # ペアデータを出力
@@ -266,12 +287,18 @@ main() {
 
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
+    local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"
     local destination_pair_stats="${APP_DIR}${COPY_PATH}${PAIR_STATS_DIR_NAME}"
     local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています"
 
     if ! cp "$output_file" "$destination_win_rate"; then
         log_error "win_rateファイルのコピーに失敗しました"
+        exit 1
+    fi
+
+    if ! cp "$star_output_file" "$destination_star_rate"; then
+        log_error "star_rateファイルのコピーに失敗しました"
         exit 1
     fi
 
@@ -286,7 +313,7 @@ main() {
     fi
 
     # Git操作
-    git_operations "$destination_win_rate" "$destination_pair_stats" "$destination_trio_stats" "$end_date"
+    git_operations "$destination_win_rate" "$destination_star_rate" "$destination_pair_stats" "$destination_trio_stats" "$end_date"
 
     # 古い出力ファイルのクリーンアップ（設定期間より古いファイルを削除）
     find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
