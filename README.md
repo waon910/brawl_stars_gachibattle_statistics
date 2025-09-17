@@ -39,6 +39,16 @@ python -m src.export_pair_stats --output-dir pair_stats_output
 
 `--output-dir` で指定したディレクトリ配下に `matchup/<map_id>.json` と `synergy/<map_id>.json` が生成されます。
 
+## トリオ勝率の出力
+
+`src/export_trio_stats.py` はマップ×ランク単位のおすすめトリオ編成を Beta-Binomial の下側信頼限界(LCB)付きで出力します。
+
+```bash
+python -m src.export_trio_stats --output-dir trio_stats_output
+```
+
+`--output-dir` で指定したディレクトリに `<map_id>/<rank_id>.json` というレイアウトでファイルが生成されます。各 JSON には集計日時、勝敗数、勝率、LCB が含まれます。
+
 ## GUIダッシュボード
 
 `streamlit` を用いてデータベースの統計情報をリアルタイムに表示するダッシュボードを提供します。
@@ -51,4 +61,4 @@ pip install streamlit pandas streamlit-autorefresh
 streamlit run src/dashboard.py
 ```
 
-シーズン、モード、マップ、ランクを任意に選択して、キャラ使用率・勝率および対キャラ勝率を視覚的に確認できます。各項目で「全体」を選択すると全データを対象とした集計結果を表示します。シーズンは毎月第1木曜日を開始日として計算されます。
+シーズン、モード、マップ、ランクを任意に選択して、キャラ使用率・勝率、対キャラ勝率、Beta-Binomial LCB に基づくおすすめトリオ編成トップNを確認できます。各項目で「全体」を選択すると全データを対象とした集計結果を表示します。シーズンは毎月第1木曜日を開始日として計算されます。
