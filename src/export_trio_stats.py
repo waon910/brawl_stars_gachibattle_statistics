@@ -1,4 +1,4 @@
-"""マップとランクごとのトリオ勝率指標をJSONとして出力するスクリプト."""
+"""ダイヤモンド以上のトリオ勝率指標をJSONとして出力するスクリプト."""
 from __future__ import annotations
 
 import argparse
@@ -23,27 +23,24 @@ JST = timezone(timedelta(hours=9))
 def export_trio_json(
     results: Dict[int, Dict[Optional[int], List[Dict[str, object]]]],
     output_dir: Path,
-    *,
-    generated_at: str,
 ) -> None:
-    """計算結果をマップID/ランクID単位のJSONとして出力する."""
+    """計算結果をマップIDごとのJSONとして出力する."""
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for map_id, ranks in results.items():
-        map_dir = output_dir / str(map_id)
-        map_dir.mkdir(parents=True, exist_ok=True)
-        for rank_id, combos in ranks.items():
-            data = {
-                "map_id": map_id,
-                "rank_id": rank_id,
-                "generated_at": generated_at,
-                "trios": combos,
+        combos = ranks.get(None, [])
+        simplified = [
+            {
+                "brawlers": combo["brawlers"],
+                "win_rate_lcb": combo["win_rate_lcb"],
             }
-            out_file = map_dir / f"{rank_id}.json"
-            with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            for combo in combos
+        ]
+        out_file = output_dir / f"{map_id}.json"
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(simplified, f, ensure_ascii=False, indent=2)
 
 
 def main() -> None:
@@ -75,11 +72,10 @@ def main() -> None:
         conn.close()
 
     logging.info("勝率指標を計算しています")
-    results = compute_trio_scores(rows, group_by_rank=True)
-    generated_at = datetime.now(JST).isoformat()
+    results = compute_trio_scores(rows, group_by_rank=False)
     output_dir = Path(args.output_dir)
     logging.info("JSONを出力しています: %s", output_dir)
-    export_trio_json(results, output_dir, generated_at=generated_at)
+    export_trio_json(results, output_dir)
     logging.info("トリオ統計の出力が完了しました")
 
 
