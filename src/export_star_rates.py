@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import mysql.connector
 
@@ -15,39 +15,37 @@ from .settings import DATA_RETENTION_DAYS
 setup_logging()
 
 
-def fetch_star_rows(conn, since: str) -> list[tuple[int, int, int, int, int]]:
+def fetch_star_rows(conn, since: str) -> List[Tuple[int, int, int, int]]:
     cursor = conn.cursor()
     sql = """
     WITH recent_ranks AS (
-        SELECT rl.id, rl.map_id, rl.rank_id
+        SELECT rl.id, rl.map_id
         FROM rank_logs rl
         WHERE SUBSTRING(rl.id, 1, 8) >= %s
     ), totals AS (
-        SELECT map_id, rank_id, COUNT(*) AS total_matches
+        SELECT map_id, COUNT(*) AS total_matches
         FROM recent_ranks
-        GROUP BY map_id, rank_id
+        GROUP BY map_id
+    ), star_counts AS (
+        SELECT rr.map_id, rsl.star_brawler_id, COUNT(*) AS star_count
+        FROM recent_ranks rr
+        JOIN rank_star_logs rsl ON rr.id = rsl.rank_log_id
+        GROUP BY rr.map_id, rsl.star_brawler_id
     )
-    SELECT rr.map_id, rr.rank_id, rsl.star_brawler_id, COUNT(*) AS star_count, t.total_matches
-    FROM recent_ranks rr
-    JOIN rank_star_logs rsl ON rr.id = rsl.rank_log_id
-    JOIN totals t ON rr.map_id = t.map_id AND rr.rank_id = t.rank_id
-    GROUP BY rr.map_id, rr.rank_id, rsl.star_brawler_id, t.total_matches
+    SELECT sc.map_id, sc.star_brawler_id, sc.star_count, t.total_matches
+    FROM star_counts sc
+    JOIN totals t ON sc.map_id = t.map_id
     """
     cursor.execute(sql, (since,))
     return cursor.fetchall()
 
 
-def build_star_stats(rows: list[tuple[int, int, int, int, int]]) -> Dict[int, Dict[int, Dict[int, Dict[str, float]]]]:
-    results: Dict[int, Dict[int, Dict[int, Dict[str, float]]]] = {}
-    for map_id, rank_id, brawler_id, star_count, total_matches in rows:
+def compute_star_rates(rows: List[Tuple[int, int, int, int]]) -> Dict[int, Dict[int, float]]:
+    results: Dict[int, Dict[int, float]] = {}
+    for map_id, brawler_id, star_count, total_matches in rows:
         map_stats = results.setdefault(map_id, {})
-        rank_stats = map_stats.setdefault(rank_id, {})
         rate = star_count / total_matches if total_matches else 0.0
-        rank_stats[brawler_id] = {
-            "star_count": star_count,
-            "total_matches": total_matches,
-            "star_rate": rate,
-        }
+        map_stats[brawler_id] = rate
     return results
 
 
@@ -76,7 +74,7 @@ def main() -> None:
     finally:
         conn.close()
 
-    stats = build_star_stats(rows)
+    stats = compute_star_rates(rows)
 
     logging.info("JSONファイルに書き込んでいます: %s", args.output)
     with open(args.output, "w", encoding="utf-8") as fp:
