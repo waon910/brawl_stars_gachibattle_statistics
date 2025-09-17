@@ -10,6 +10,7 @@ OUTPUT_DIR="${BASE_DIR}/data/output"
 LOG_DIR="${BASE_DIR}/data/logs"
 APP_DIR="/Users/shunsukeiwao/develop/brawl_stars_gachibattle_app"
 COPY_PATH="/lib/map-meta/"
+COPY_PATH2="/public/"
 WIN_RATE_FILE_NAME="win_rates.json"
 STAR_RATE_FILE_NAME="star_rates.json"
 PAIR_STATS_DIR_NAME="pair_stats"
@@ -153,7 +154,7 @@ git_operations() {
     fi
     
     # Git操作の実行
-    git add ".${COPY_PATH}" || {
+    git add ".${COPY_PATH}" ".${COPY_PATH2}" || {
         log_error "ファイルのGit追加に失敗しました"
         return 1
     }
@@ -288,7 +289,7 @@ main() {
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"
-    local destination_pair_stats="${APP_DIR}${COPY_PATH}${PAIR_STATS_DIR_NAME}"
+    local destination_pair_stats="${APP_DIR}${COPY_PATH2}${PAIR_STATS_DIR_NAME}"
     local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています"
 
