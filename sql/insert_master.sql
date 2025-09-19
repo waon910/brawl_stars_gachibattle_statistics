@@ -131,6 +131,8 @@ REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000005, 'Shooting Star'
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000022, 'Hideout', '隠れ家', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000082, 'Layer Cake', 'ミルフィーユ', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000083, 'Dry Season', '乾燥地帯', 1);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000081, 'Excel', '', 1);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000617, 'Infinite Doom', '', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000785, 'Kaboom Canyon', 'どんぱち谷', 5);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000019, 'Safe Zone', '安全地帯', 5);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000053, 'Hot Potato', 'ホットポテト', 5);
