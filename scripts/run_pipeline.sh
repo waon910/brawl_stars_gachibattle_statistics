@@ -13,6 +13,7 @@ COPY_PATH="/lib/map-meta/"
 COPY_PATH2="/public/"
 WIN_RATE_FILE_NAME="win_rates.json"
 STAR_RATE_FILE_NAME="star_rates.json"
+RANK_MATCH_COUNT_FILE_NAME="rank_match_counts.json"
 PAIR_STATS_DIR_NAME="pair_stats"
 TRIO_STATS_DIR_NAME="trio_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
@@ -200,6 +201,7 @@ main() {
     local end_date=$(TZ=Asia/Tokyo date +%Y%m%d%H%M)
     local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
     local star_output_file="${OUTPUT_DIR}/${STAR_RATE_FILE_NAME}"
+    local rank_match_output_file="${OUTPUT_DIR}/${RANK_MATCH_COUNT_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
     local trio_output_dir="${OUTPUT_DIR}/${TRIO_STATS_DIR_NAME}"
     
@@ -250,6 +252,24 @@ main() {
         log_warn "出力ファイルが空です: $star_output_file"
     fi
 
+    # ダイヤモンド以上のランクマッチ数を出力
+    log_info "ランクマッチ数データをエクスポートしています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_rank_match_counts --output "$rank_match_output_file"; then
+        log_error "ランクマッチ数データのエクスポートに失敗しました"
+        exit 1
+    fi
+
+    if [[ ! -f "$rank_match_output_file" ]]; then
+        log_error "出力ファイルが見つかりません: $rank_match_output_file"
+        exit 1
+    fi
+
+    log_info "出力ファイルを生成しました: $rank_match_output_file"
+
+    if [[ ! -s "$rank_match_output_file" ]]; then
+        log_warn "出力ファイルが空です: $rank_match_output_file"
+    fi
+
     # ペアデータを出力
     log_info "ペアデータをエクスポートしています"
     if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
@@ -289,6 +309,7 @@ main() {
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"
+    local destination_rank_match="${APP_DIR}${COPY_PATH}${RANK_MATCH_COUNT_FILE_NAME}"
     local destination_pair_stats="${APP_DIR}${COPY_PATH2}${PAIR_STATS_DIR_NAME}"
     local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています"
@@ -300,6 +321,11 @@ main() {
 
     if ! cp "$star_output_file" "$destination_star_rate"; then
         log_error "star_rateファイルのコピーに失敗しました"
+        exit 1
+    fi
+
+    if ! cp "$rank_match_output_file" "$destination_rank_match"; then
+        log_error "rank_matchファイルのコピーに失敗しました"
         exit 1
     fi
 
