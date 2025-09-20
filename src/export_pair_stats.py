@@ -13,12 +13,12 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
 setup_logging()
 JST = timezone(timedelta(hours=9))
 
 
-def beta_lcb(alpha: float, beta_param: float, confidence: float = 0.95) -> float:
+def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界を計算する"""
     return beta.ppf(1 - confidence, alpha, beta_param)
 
@@ -96,7 +96,12 @@ def fetch_synergy_stats(conn, since: str) -> List[Tuple[int, int, int, float, fl
     return cur.fetchall()
 
 
-def compute_pair_rates(rows: List[Tuple[int, int, int, float, float]], symmetrical: bool) -> Dict[int, Dict[int, Dict[int, float]]]:
+def compute_pair_rates(
+    rows: List[Tuple[int, int, int, float, float]],
+    symmetrical: bool,
+    *,
+    confidence: float = CONFIDENCE_LEVEL,
+) -> Dict[int, Dict[int, Dict[int, float]]]:
     """Beta-Binomialに基づきLCBを算出"""
     stats: Dict[int, Dict[Tuple[int, int], Dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0})
@@ -123,7 +128,7 @@ def compute_pair_rates(rows: List[Tuple[int, int, int, float, float]], symmetric
         for (b1, b2), val in pairs.items():
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
-            lcb = beta_lcb(alpha_post, beta_post)
+            lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
             map_result[b1][b2] = lcb
             if symmetrical:
                 map_result[b2][b1] = lcb
@@ -162,8 +167,8 @@ def main() -> None:
     finally:
         conn.close()
 
-    matchup_result = compute_pair_rates(matchup_rows, symmetrical=False)
-    synergy_result = compute_pair_rates(synergy_rows, symmetrical=True)
+    matchup_result = compute_pair_rates(matchup_rows, symmetrical=False, confidence=CONFIDENCE_LEVEL)
+    synergy_result = compute_pair_rates(synergy_rows, symmetrical=True, confidence=CONFIDENCE_LEVEL)
     result = {"matchup": matchup_result, "synergy": synergy_result}
 
     base_dir = Path(args.output_dir)
