@@ -1,4 +1,4 @@
-"""ダイヤモンド以上のトリオ勝率指標をJSONとして出力するスクリプト."""
+"""設定ランク以上のトリオ勝率指標をJSONとして出力するスクリプト."""
 from __future__ import annotations
 
 import argparse
