@@ -34,6 +34,7 @@ def export_trio_json(
         simplified = [
             {
                 "brawlers": combo["brawlers"],
+                "games": combo["games"],
                 "win_rate_lcb": combo["win_rate_lcb"],
             }
             for combo in combos
