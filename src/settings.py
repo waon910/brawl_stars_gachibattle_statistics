@@ -12,6 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = BASE_DIR / "config" / "settings.env"
 LOCAL_ENV_FILE = BASE_DIR / ".env.local"
 _DEFAULT_RETENTION_DAYS = 30
+_DEFAULT_MIN_RANK_ID = 4
 
 
 @lru_cache(maxsize=1)
@@ -36,3 +37,4 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 DATA_RETENTION_DAYS = _get_int_env("DATA_RETENTION_DAYS", _DEFAULT_RETENTION_DAYS)
+MIN_RANK_ID = _get_int_env("MIN_RANK_ID", _DEFAULT_MIN_RANK_ID)

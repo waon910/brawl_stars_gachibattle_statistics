@@ -1,6 +1,6 @@
 """マップIDごとのキャラクタータグ勝率をJSON形式で出力するスクリプト.
 
-設定された日数の範囲で行われたダイヤモンドランク以上の試合を対象とし、
+設定された日数の範囲で行われた設定ランク以上の試合を対象とし、
 勝率はEmpirical Bayes(Beta-Binomial)による縮約と95%下側信頼区間(LCB)で算出する。
 """
 
@@ -16,7 +16,7 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS
+from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
 
 # Monte Carloサンプリング数
 SAMPLE_SIZE = 10000
@@ -39,7 +39,7 @@ def fetch_stats(conn, since: str) -> List[tuple]:
         SELECT bl.id AS battle_log_id, rl.map_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= 4 AND SUBSTRING(rl.id,1,8) >= %s
+        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
     ), pair_counts AS (
         SELECT wl.battle_log_id,
                COUNT(DISTINCT wl.win_brawler_id) AS win_cnt,
@@ -71,7 +71,7 @@ def fetch_stats(conn, since: str) -> List[tuple]:
     FROM weighted_results wr
     GROUP BY wr.map_id, wr.brawler_id
     """
-    cur.execute(sql, (since,))
+    cur.execute(sql, (MIN_RANK_ID, since))
     return cur.fetchall()
 
 

@@ -29,6 +29,8 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 
 データの保存期間などの共通設定値は `config/settings.env` で管理しています。デフォルトでは `DATA_RETENTION_DAYS=30` として30日分のデータを扱います。保持期間を変更したい場合はこの値を編集するだけで、Pythonスクリプトとシェルスクリプトの両方に反映されます。
 
+また、`MIN_RANK_ID=4` によりダイヤモンドランク相当以上の対戦のみを集計対象としています。環境に応じて対象ランクを変更したい場合はこの値を更新してください。
+
 ## 対キャラ・協力勝率の出力
 
 `src/export_pair_stats.py` を実行すると、対キャラ勝率(`matchup`)と味方同士の相性(`synergy`)をマップごとに分割した JSON として出力できます。
@@ -48,6 +50,16 @@ python -m src.export_trio_stats --output-dir trio_stats_output
 ```
 
 `--output-dir` で指定したディレクトリに `<map_id>/<rank_id>.json` というレイアウトでファイルが生成されます。各 JSON には集計日時、勝敗数、勝率、LCB が含まれます。
+
+## 3対3勝率の出力
+
+`src/export_3v3_win_rates.py` は勝利チームと敗北チームの組み合わせごとに勝率と下側信頼限界(LCB)を算出し、マップ単位の JSON として出力します。
+
+```bash
+python -m src.export_3v3_win_rates --output-dir three_vs_three_output
+```
+
+出力ディレクトリ配下には `<map_id>.json` が生成され、各ファイルに勝利側・敗北側のキャラクターID(3体ずつ)、勝敗数、勝率、LCB が含まれます。
 
 ## GUIダッシュボード
 
