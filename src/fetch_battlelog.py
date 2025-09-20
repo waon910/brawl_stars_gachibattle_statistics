@@ -27,7 +27,7 @@ MAX_RETRIES = 3
 # 取得サイクル時間
 ACQ_CYCLE_TIME = 6
 # トロフィー境界
-TROPHIE_BORDER = 90000
+TROPHIE_BORDER = 80000
 # 一度に取得するプレイヤー数
 FETCH_BATCH_SIZE = 5
 # 並列取得時の最大ワーカー数
@@ -278,7 +278,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                         #     cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
                         #     if cur.rowcount == 1:  # 削除されたら1、既に存在しなかったら0
                         #         logger.info("プレイヤー削除:%s", player_tag)
-                    if p_tag and 18 < trophies <= 22:
+                    if p_tag and 15 < trophies <= 22:
                         cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                         if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
                             new_players += 1
