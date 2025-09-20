@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RankLogEntry:
     """ランクログ1件分のメタデータ."""
 
-    id: int
+    id: str
     map_id: int
     rank_id: int
     mode_id: Optional[int]
@@ -27,8 +27,8 @@ class RankLogEntry:
 class RankedBattle:
     """1試合分の勝敗情報."""
 
-    battle_log_id: int
-    rank_log_id: int
+    battle_log_id: str
+    rank_log_id: str
     map_id: int
     rank_id: int
     mode_id: Optional[int]
@@ -40,10 +40,10 @@ class RankedBattle:
 class StatsDataset:
     """統計エクスポートで使い回すデータセット."""
 
-    rank_logs: Dict[int, RankLogEntry]
+    rank_logs: Dict[str, RankLogEntry]
     battles: List[RankedBattle]
-    star_logs: List[Tuple[int, int]]
-    _participants_cache: Optional[Dict[int, Set[int]]] = field(
+    star_logs: List[Tuple[str, int]]
+    _participants_cache: Optional[Dict[str, Set[int]]] = field(
         default=None, init=False, repr=False
     )
 
@@ -52,11 +52,11 @@ class StatsDataset:
 
         return iter(self.battles)
 
-    def participants_by_rank_log(self) -> Dict[int, Set[int]]:
+    def participants_by_rank_log(self) -> Dict[str, Set[int]]:
         """ランクログIDごとの参加キャラクター集合を取得する."""
 
         if self._participants_cache is None:
-            participants: Dict[int, Set[int]] = defaultdict(set)
+            participants: Dict[str, Set[int]] = defaultdict(set)
             for battle in self.battles:
                 if battle.win_brawlers:
                     participants[battle.rank_log_id].update(battle.win_brawlers)
@@ -72,7 +72,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     cursor = conn.cursor()
 
     logger.info("ランクログ情報を読み込んでいます")
-    rank_logs: Dict[int, RankLogEntry] = {}
+    rank_logs: Dict[str, RankLogEntry] = {}
     cursor.execute(
         """
         SELECT rl.id, rl.map_id, rl.rank_id, m.mode_id
@@ -83,13 +83,13 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         (MIN_RANK_ID, since),
     )
     for rl_id, map_id, rank_id, mode_id in cursor.fetchall():
-        rl_id_int = int(rl_id)
-        rank_logs[rl_id_int] = RankLogEntry(
-            id=rl_id_int,
+        rl_id_str = str(rl_id)
+        rank_logs[rl_id_str] = RankLogEntry(
+            id=rl_id_str,
             map_id=int(map_id),
             rank_id=int(rank_id),
             mode_id=int(mode_id) if mode_id is not None else None,
-            date_key=str(rl_id)[:8],
+            date_key=rl_id_str[:8],
         )
 
     logger.info("バトルログ情報を読み込んでいます")
@@ -102,9 +102,9 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         """,
         (MIN_RANK_ID, since),
     )
-    battle_rank_map: Dict[int, int] = {}
+    battle_rank_map: Dict[str, str] = {}
     for battle_log_id, rank_log_id in cursor.fetchall():
-        battle_rank_map[int(battle_log_id)] = int(rank_log_id)
+        battle_rank_map[str(battle_log_id)] = str(rank_log_id)
 
     logger.info("勝敗ログを読み込んでいます")
     cursor.execute(
@@ -121,9 +121,9 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     def _team_factory() -> Dict[str, Set[int]]:
         return {"win": set(), "lose": set()}
 
-    battle_teams: Dict[int, Dict[str, Set[int]]] = defaultdict(_team_factory)
+    battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(_team_factory)
     for battle_log_id, win_brawler_id, lose_brawler_id in cursor.fetchall():
-        battle_id = int(battle_log_id)
+        battle_id = str(battle_log_id)
         if battle_id not in battle_rank_map:
             continue
         battle_teams[battle_id]["win"].add(int(win_brawler_id))
@@ -139,12 +139,12 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         """,
         (MIN_RANK_ID, since),
     )
-    star_logs: List[Tuple[int, int]] = []
+    star_logs: List[Tuple[str, int]] = []
     for rank_log_id, star_brawler_id in cursor.fetchall():
-        rl_id_int = int(rank_log_id)
-        if rl_id_int not in rank_logs:
+        rl_id_str = str(rank_log_id)
+        if rl_id_str not in rank_logs:
             continue
-        star_logs.append((rl_id_int, int(star_brawler_id)))
+        star_logs.append((rl_id_str, int(star_brawler_id)))
 
     cursor.close()
 
