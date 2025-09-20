@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from scipy.stats import beta
 
 from .settings import CONFIDENCE_LEVEL, MIN_RANK_ID
+from .stats_loader import StatsDataset
 
 TrioRow = Tuple[int, int, int, int, int, int, float, float]
 
@@ -17,8 +18,9 @@ def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEV
 
 
 def fetch_trio_rows(
-    conn,
+    conn=None,
     *,
+    dataset: Optional[StatsDataset] = None,
     since: Optional[str] = None,
     until: Optional[str] = None,
     rank_id: Optional[int] = None,
@@ -26,6 +28,20 @@ def fetch_trio_rows(
     map_id: Optional[int] = None,
 ) -> List[TrioRow]:
     """指定した条件でトリオの勝敗集計を取得する."""
+
+    if dataset is not None:
+        return _fetch_trio_rows_from_dataset(
+            dataset,
+            since=since,
+            until=until,
+            rank_id=rank_id,
+            mode_id=mode_id,
+            map_id=map_id,
+        )
+
+    if conn is None:
+        raise ValueError("conn または dataset のいずれかを指定してください")
+
     cur = conn.cursor()
     conditions: List[str] = []
     params: List[object] = [MIN_RANK_ID]
@@ -133,6 +149,66 @@ def fetch_trio_rows(
     cur.execute(sql, tuple(params))
     rows: List[TrioRow] = cur.fetchall()
     cur.close()
+    return rows
+
+
+def _fetch_trio_rows_from_dataset(
+    dataset: StatsDataset,
+    *,
+    since: Optional[str],
+    until: Optional[str],
+    rank_id: Optional[int],
+    mode_id: Optional[int],
+    map_id: Optional[int],
+) -> List[TrioRow]:
+    stats: Dict[Tuple[int, int, Optional[int], Tuple[int, int, int]], Dict[str, float]] = defaultdict(
+        lambda: {"wins": 0.0, "losses": 0.0}
+    )
+
+    for battle in dataset.iter_ranked_battles():
+        rank_entry = dataset.rank_logs.get(battle.rank_log_id)
+        if rank_entry is None:
+            continue
+        if since is not None and rank_entry.date_key < since:
+            continue
+        if until is not None and rank_entry.date_key >= until:
+            continue
+        if rank_id is not None and rank_entry.rank_id != rank_id:
+            continue
+        if mode_id is not None and rank_entry.mode_id != mode_id:
+            continue
+        if map_id is not None and battle.map_id != map_id:
+            continue
+
+        if battle.win_brawlers and len(battle.win_brawlers) == 3:
+            trio = tuple(sorted(battle.win_brawlers))
+            key = (battle.map_id, rank_entry.rank_id, rank_entry.mode_id, trio)
+            stats[key]["wins"] += 1.0
+        if battle.lose_brawlers and len(battle.lose_brawlers) == 3:
+            trio = tuple(sorted(battle.lose_brawlers))
+            key = (battle.map_id, rank_entry.rank_id, rank_entry.mode_id, trio)
+            stats[key]["losses"] += 1.0
+
+    rows: List[TrioRow] = []
+    for (map_key, rank_key, mode_key, trio), record in stats.items():
+        wins = record["wins"]
+        losses = record["losses"]
+        if wins <= 0 and losses <= 0:
+            continue
+        b1, b2, b3 = trio
+        mode_value = 0 if mode_key is None else int(mode_key)
+        rows.append(
+            (
+                int(map_key),
+                int(rank_key),
+                mode_value,
+                int(b1),
+                int(b2),
+                int(b3),
+                float(wins),
+                float(losses),
+            )
+        )
     return rows
 
 
