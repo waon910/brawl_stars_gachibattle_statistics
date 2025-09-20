@@ -1,7 +1,8 @@
-"""マップIDごとのキャラクタータグ勝率をJSON形式で出力するスクリプト.
+"""マップIDごとのキャラクター勝率指標をJSON形式で出力するスクリプト.
 
 設定された日数の範囲で行われた設定ランク以上の試合を対象とし、
-勝率はEmpirical Bayes(Beta-Binomial)による縮約と90%下側信頼区間(LCB)で算出する。
+各キャラクターのバトルログ数（=試合数）とBeta-Binomial による下側信頼限界(LCB)
+勝率を算出して出力する。
 """
 
 import argparse
@@ -40,36 +41,30 @@ def fetch_stats(conn, since: str) -> List[tuple]:
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
         WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
-    ), pair_counts AS (
-        SELECT wl.battle_log_id,
-               COUNT(DISTINCT wl.win_brawler_id) AS win_cnt,
-               COUNT(DISTINCT wl.lose_brawler_id) AS lose_cnt
+    ), win_counts AS (
+        SELECT rb.map_id,
+               wl.win_brawler_id AS brawler_id,
+               COUNT(DISTINCT wl.battle_log_id) AS wins
         FROM win_lose_logs wl
         JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        GROUP BY wl.battle_log_id
-    ), win_results AS (
-        SELECT rb.map_id, wl.win_brawler_id AS brawler_id,
-               SUM(1.0 / pc.lose_cnt) AS wins, 0.0 AS losses
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
         GROUP BY rb.map_id, wl.win_brawler_id
-    ), lose_results AS (
-        SELECT rb.map_id, wl.lose_brawler_id AS brawler_id,
-               0.0 AS wins, SUM(1.0 / pc.win_cnt) AS losses
+    ), lose_counts AS (
+        SELECT rb.map_id,
+               wl.lose_brawler_id AS brawler_id,
+               COUNT(DISTINCT wl.battle_log_id) AS losses
         FROM win_lose_logs wl
         JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        JOIN pair_counts pc ON wl.battle_log_id = pc.battle_log_id
         GROUP BY rb.map_id, wl.lose_brawler_id
-    ), weighted_results AS (
-        SELECT * FROM win_results
+    ), combined AS (
+        SELECT map_id, brawler_id, wins, 0 AS losses FROM win_counts
         UNION ALL
-        SELECT * FROM lose_results
+        SELECT map_id, brawler_id, 0 AS wins, losses FROM lose_counts
     )
-    SELECT wr.map_id, wr.brawler_id,
-           SUM(wr.wins) AS wins, SUM(wr.losses) AS losses
-    FROM weighted_results wr
-    GROUP BY wr.map_id, wr.brawler_id
+    SELECT map_id, brawler_id,
+           SUM(wins) AS wins,
+           SUM(losses) AS losses
+    FROM combined
+    GROUP BY map_id, brawler_id
     """
     cur.execute(sql, (MIN_RANK_ID, since))
     return cur.fetchall()
@@ -77,7 +72,7 @@ def fetch_stats(conn, since: str) -> List[tuple]:
 
 def compute_win_rates(
     rows: List[tuple], *, confidence: float = CONFIDENCE_LEVEL
-) -> Dict[int, Dict[int, float]]:
+) -> Dict[int, Dict[int, Dict[str, float]]]:
     logging.info("データを集計しています...")
     # map_id -> brawler_tag -> {wins, games}
     stats: Dict[int, Dict[int, Dict[str, float]]] = defaultdict(
@@ -93,7 +88,7 @@ def compute_win_rates(
         stats[map_id][brawler_id]["games"] += wins_f + losses_f
 
     logging.info("勝率を計算しています...")
-    results: Dict[int, Dict[int, float]] = {}
+    results: Dict[int, Dict[int, Dict[str, float]]] = {}
     total_maps = len(stats)
     for idx, (map_id, brawlers) in enumerate(stats.items(), 1):
         logging.info("%d/%d %s を処理中", idx, total_maps, map_id)
@@ -107,12 +102,15 @@ def compute_win_rates(
         alpha_prior = mean * strength
         beta_prior = (1 - mean) * strength
 
-        map_result: Dict[int, float] = {}
+        map_result: Dict[int, Dict[str, float]] = {}
         for brawler_id, val in brawlers.items():
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
             lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
-            map_result[brawler_id] = lcb
+            map_result[brawler_id] = {
+                "games": int(round(val["games"])),
+                "win_rate_lcb": lcb,
+            }
         results[map_id] = map_result
     return results
 
