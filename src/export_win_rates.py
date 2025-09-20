@@ -8,29 +8,23 @@
 import argparse
 import json
 import logging
-import random
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
 import mysql.connector
+from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
 from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
 
-# Monte Carloサンプリング数
-SAMPLE_SIZE = 10000
-random.seed(0)
 setup_logging()
 
 
-def beta_lcb(alpha: float, beta: float, confidence: float = CONFIDENCE_LEVEL) -> float:
-    """Beta分布の下側信頼限界をモンテカルロ法で近似する"""
-    samples = [random.betavariate(alpha, beta) for _ in range(SAMPLE_SIZE)]
-    samples.sort()
-    index = int((1 - confidence) * len(samples))
-    return samples[index]
+def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
+    """Beta分布の下側信頼限界を求める"""
+    return float(beta.ppf(1 - confidence, alpha, beta_param))
 
 
 def fetch_stats(conn, since: str) -> List[tuple]:
