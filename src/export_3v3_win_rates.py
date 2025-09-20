@@ -170,13 +170,17 @@ def compute_matchup_scores(
             record = {
                 "win_brawlers": list(win_team),
                 "lose_brawlers": list(lose_team),
+                "games": int(round(games)),
                 "win_rate": wins_val / games if games > 0 else 0.0,
                 "win_rate_lcb": lcb,
             }
-            records.append((record, games))
+            records.append(record)
 
-        records.sort(key=lambda item: (item[0]["win_rate_lcb"], item[1]), reverse=True)
-        results[map_id] = [record for record, _ in records]
+        records.sort(
+            key=lambda item: (item["win_rate_lcb"], item["games"]),
+            reverse=True,
+        )
+        results[map_id] = records
 
     return results
 

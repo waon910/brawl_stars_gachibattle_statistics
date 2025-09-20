@@ -101,7 +101,7 @@ def compute_pair_rates(
     symmetrical: bool,
     *,
     confidence: float = CONFIDENCE_LEVEL,
-) -> Dict[int, Dict[int, Dict[int, float]]]:
+) -> Dict[int, Dict[int, Dict[int, Dict[str, float]]]]:
     """Beta-Binomialに基づきLCBを算出"""
     stats: Dict[int, Dict[Tuple[int, int], Dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: {"wins": 0.0, "games": 0.0})
@@ -112,7 +112,7 @@ def compute_pair_rates(
         stats[map_id][(b1, b2)]["wins"] += wins_f
         stats[map_id][(b1, b2)]["games"] += wins_f + losses_f
 
-    results: Dict[int, Dict[int, Dict[int, float]]] = {}
+    results: Dict[int, Dict[int, Dict[int, Dict[str, float]]]] = {}
     for map_id, pairs in stats.items():
         total_wins = sum(v["wins"] for v in pairs.values())
         total_games = sum(v["games"] for v in pairs.values())
@@ -124,14 +124,18 @@ def compute_pair_rates(
         alpha_prior = mean * strength
         beta_prior = (1 - mean) * strength
 
-        map_result: Dict[int, Dict[int, float]] = defaultdict(dict)
+        map_result: Dict[int, Dict[int, Dict[str, float]]] = defaultdict(dict)
         for (b1, b2), val in pairs.items():
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
             lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
-            map_result[b1][b2] = lcb
+            record = {
+                "games": int(round(val["games"])),
+                "win_rate_lcb": lcb,
+            }
+            map_result[b1][b2] = record
             if symmetrical:
-                map_result[b2][b1] = lcb
+                map_result[b2][b1] = record
         results[map_id] = map_result
     return results
 
