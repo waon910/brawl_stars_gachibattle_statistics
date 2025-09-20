@@ -16,7 +16,8 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
+from .stats_loader import StatsDataset, load_recent_ranked_battles
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 
 setup_logging()
 JST = timezone(timedelta(hours=9))
@@ -30,91 +31,33 @@ def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEV
     return float(beta.ppf(1 - confidence, alpha, beta_param))
 
 
-def fetch_matchup_rows(conn, since: str) -> List[MatchupRow]:
-    """3対3の編成ごとの勝敗集計を取得する."""
+def fetch_matchup_rows(dataset: StatsDataset) -> List[MatchupRow]:
+    """3対3の編成ごとの勝敗集計を共通データから生成する."""
 
-    cursor = conn.cursor()
-    query = """
-        WITH recent_battles AS (
-            SELECT bl.id AS battle_log_id,
-                   rl.map_id
-            FROM battle_logs bl
-            JOIN rank_logs rl ON bl.rank_log_id = rl.id
-            WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
-        ),
-        win_brawlers AS (
-            SELECT DISTINCT wl.battle_log_id, wl.win_brawler_id AS brawler_id
-            FROM win_lose_logs wl
-            JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        ),
-        lose_brawlers AS (
-            SELECT DISTINCT wl.battle_log_id, wl.lose_brawler_id AS brawler_id
-            FROM win_lose_logs wl
-            JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        ),
-        win_trios AS (
-            SELECT rb.map_id,
-                   wb1.battle_log_id,
-                   wb1.brawler_id AS brawler_a,
-                   wb2.brawler_id AS brawler_b,
-                   wb3.brawler_id AS brawler_c
-            FROM win_brawlers wb1
-            JOIN win_brawlers wb2
-                ON wb1.battle_log_id = wb2.battle_log_id
-               AND wb1.brawler_id < wb2.brawler_id
-            JOIN win_brawlers wb3
-                ON wb1.battle_log_id = wb3.battle_log_id
-               AND wb2.brawler_id < wb3.brawler_id
-            JOIN recent_battles rb ON wb1.battle_log_id = rb.battle_log_id
-        ),
-        lose_trios AS (
-            SELECT rb.map_id,
-                   lb1.battle_log_id,
-                   lb1.brawler_id AS brawler_a,
-                   lb2.brawler_id AS brawler_b,
-                   lb3.brawler_id AS brawler_c
-            FROM lose_brawlers lb1
-            JOIN lose_brawlers lb2
-                ON lb1.battle_log_id = lb2.battle_log_id
-               AND lb1.brawler_id < lb2.brawler_id
-            JOIN lose_brawlers lb3
-                ON lb1.battle_log_id = lb3.battle_log_id
-               AND lb2.brawler_id < lb3.brawler_id
-            JOIN recent_battles rb ON lb1.battle_log_id = rb.battle_log_id
+    stats: Dict[Tuple[int, Tuple[int, int, int], Tuple[int, int, int]], float] = defaultdict(float)
+    for battle in dataset.iter_ranked_battles():
+        if len(battle.win_brawlers) != 3 or len(battle.lose_brawlers) != 3:
+            continue
+        win_team = tuple(sorted(battle.win_brawlers))
+        lose_team = tuple(sorted(battle.lose_brawlers))
+        stats[(battle.map_id, win_team, lose_team)] += 1.0
+
+    rows: List[MatchupRow] = []
+    for (map_id, win_team, lose_team), wins in stats.items():
+        win_a, win_b, win_c = win_team
+        lose_a, lose_b, lose_c = lose_team
+        rows.append(
+            (
+                int(map_id),
+                int(win_a),
+                int(win_b),
+                int(win_c),
+                int(lose_a),
+                int(lose_b),
+                int(lose_c),
+                float(wins),
+            )
         )
-        SELECT wt.map_id,
-               wt.brawler_a AS win_a,
-               wt.brawler_b AS win_b,
-               wt.brawler_c AS win_c,
-               lt.brawler_a AS lose_a,
-               lt.brawler_b AS lose_b,
-               lt.brawler_c AS lose_c,
-               COUNT(*) AS wins
-        FROM win_trios wt
-        JOIN lose_trios lt ON wt.battle_log_id = lt.battle_log_id
-        GROUP BY wt.map_id,
-                 win_a,
-                 win_b,
-                 win_c,
-                 lose_a,
-                 lose_b,
-                 lose_c
-    """
-    cursor.execute(query, (MIN_RANK_ID, since))
-    rows: List[MatchupRow] = [
-        (
-            int(map_id),
-            int(win_a),
-            int(win_b),
-            int(win_c),
-            int(lose_a),
-            int(lose_b),
-            int(lose_c),
-            float(wins),
-        )
-        for map_id, win_a, win_b, win_c, lose_a, lose_b, lose_c, wins in cursor.fetchall()
-    ]
-    cursor.close()
     return rows
 
 
@@ -226,7 +169,8 @@ def main() -> None:
 
     try:
         logging.info("3対3編成データを取得しています...")
-        rows = fetch_matchup_rows(conn, since)
+        dataset = load_recent_ranked_battles(conn, since)
+        rows = fetch_matchup_rows(dataset)
         logging.info("%d 行の3対3データを取得", len(rows))
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")

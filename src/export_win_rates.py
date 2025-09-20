@@ -10,14 +10,15 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import mysql.connector
 from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
+from .stats_loader import StatsDataset, load_recent_ranked_battles
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 
 setup_logging()
 
@@ -27,41 +28,24 @@ def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEV
     return float(beta.ppf(1 - confidence, alpha, beta_param))
 
 
-def fetch_stats(conn, since: str) -> List[tuple]:
-    cur = conn.cursor()
-    sql = """
-    WITH recent_battles AS (
-        SELECT bl.id AS battle_log_id, rl.map_id
-        FROM battle_logs bl
-        JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
-    ), win_counts AS (
-        SELECT rb.map_id,
-               wl.win_brawler_id AS brawler_id,
-               COUNT(DISTINCT wl.battle_log_id) AS wins
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        GROUP BY rb.map_id, wl.win_brawler_id
-    ), lose_counts AS (
-        SELECT rb.map_id,
-               wl.lose_brawler_id AS brawler_id,
-               COUNT(DISTINCT wl.battle_log_id) AS losses
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        GROUP BY rb.map_id, wl.lose_brawler_id
-    ), combined AS (
-        SELECT map_id, brawler_id, wins, 0 AS losses FROM win_counts
-        UNION ALL
-        SELECT map_id, brawler_id, 0 AS wins, losses FROM lose_counts
+def fetch_stats(dataset: StatsDataset) -> List[tuple]:
+    """共通データセットから勝敗集計を生成する."""
+
+    stats: Dict[Tuple[int, int], Dict[str, float]] = defaultdict(
+        lambda: {"wins": 0.0, "losses": 0.0}
     )
-    SELECT map_id, brawler_id,
-           SUM(wins) AS wins,
-           SUM(losses) AS losses
-    FROM combined
-    GROUP BY map_id, brawler_id
-    """
-    cur.execute(sql, (MIN_RANK_ID, since))
-    return cur.fetchall()
+    for battle in dataset.iter_ranked_battles():
+        if battle.win_brawlers:
+            for brawler_id in battle.win_brawlers:
+                stats[(battle.map_id, brawler_id)]["wins"] += 1.0
+        if battle.lose_brawlers:
+            for brawler_id in battle.lose_brawlers:
+                stats[(battle.map_id, brawler_id)]["losses"] += 1.0
+
+    rows: List[tuple] = []
+    for (map_id, brawler_id), record in stats.items():
+        rows.append((map_id, brawler_id, record["wins"], record["losses"]))
+    return rows
 
 
 def compute_win_rates(
@@ -125,7 +109,8 @@ def main() -> None:
         raise SystemExit(f"データベースに接続できません: {e}")
     try:
         logging.info("統計情報を取得しています...")
-        rows = fetch_stats(conn, since)
+        dataset = load_recent_ranked_battles(conn, since)
+        rows = fetch_stats(dataset)
         logging.info("%d 行のデータを取得しました", len(rows))
     except mysql.connector.Error as e:
         raise SystemExit(f"クエリの実行に失敗しました: {e}")
