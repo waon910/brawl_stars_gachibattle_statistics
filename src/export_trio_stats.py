@@ -14,6 +14,7 @@ import mysql.connector
 from .db import get_connection
 from .logging_config import setup_logging
 from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
+from .stats_loader import load_recent_ranked_battles
 from .trio_stats import compute_trio_scores, fetch_trio_rows
 
 setup_logging()
@@ -65,7 +66,8 @@ def main() -> None:
 
     try:
         logging.info("トリオ編成データを取得しています...")
-        rows = fetch_trio_rows(conn, since=since)
+        dataset = load_recent_ranked_battles(conn, since)
+        rows = fetch_trio_rows(dataset=dataset, since=since)
         logging.info("%d 行のトリオデータを取得", len(rows))
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
