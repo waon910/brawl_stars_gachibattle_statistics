@@ -217,30 +217,29 @@ main() {
     fi
 
     # 勝率データを出力
-    log_info "勝率データをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_win_rates --output "$output_file"; then
-        log_error "勝率データのエクスポートに失敗しました"
+    log_info "統計データをまとめてエクスポートしています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python \
+        -m src.export_all_stats \
+        --output-root "$OUTPUT_DIR" \
+        --win-rate-filename "$WIN_RATE_FILE_NAME" \
+        --star-rate-filename "$STAR_RATE_FILE_NAME" \
+        --rank-match-count-filename "$RANK_MATCH_COUNT_FILE_NAME" \
+        --pair-dir-name "$PAIR_STATS_DIR_NAME" \
+        --trio-dir-name "$TRIO_STATS_DIR_NAME" \
+        --three-vs-three-dir-name "$THREE_VS_THREE_STATS_DIR_NAME"; then
+        log_error "統計データのエクスポートに失敗しました"
         exit 1
     fi
-    
-    # 出力ファイルの存在確認
+
     if [[ ! -f "$output_file" ]]; then
         log_error "出力ファイルが見つかりません: $output_file"
         exit 1
     fi
-    
+
     log_info "出力ファイルを生成しました: $output_file"
 
-    # ファイルサイズをチェック（空ファイルかどうか）
     if [[ ! -s "$output_file" ]]; then
         log_warn "出力ファイルが空です: $output_file"
-    fi
-
-    # スターデータを出力
-    log_info "スター取得データをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_star_rates --output "$star_output_file"; then
-        log_error "スター取得データのエクスポートに失敗しました"
-        exit 1
     fi
 
     if [[ ! -f "$star_output_file" ]]; then
@@ -254,13 +253,6 @@ main() {
         log_warn "出力ファイルが空です: $star_output_file"
     fi
 
-    # ダイヤモンド以上のランクマッチ数を出力
-    log_info "ランクマッチ数データをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_rank_match_counts --output "$rank_match_output_file"; then
-        log_error "ランクマッチ数データのエクスポートに失敗しました"
-        exit 1
-    fi
-
     if [[ ! -f "$rank_match_output_file" ]]; then
         log_error "出力ファイルが見つかりません: $rank_match_output_file"
         exit 1
@@ -272,13 +264,6 @@ main() {
         log_warn "出力ファイルが空です: $rank_match_output_file"
     fi
 
-    # ペアデータを出力
-    log_info "ペアデータをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_pair_stats --output-dir "$pair_output_dir"; then
-        log_error "ペアデータのエクスポートに失敗しました"
-        exit 1
-    fi
-
     if [[ ! -d "$pair_output_dir" ]]; then
         log_error "出力ディレクトリが見つかりません: $pair_output_dir"
         exit 1
@@ -287,14 +272,7 @@ main() {
     log_info "出力ディレクトリを生成しました: $pair_output_dir"
 
     if [[ -z $(find "$pair_output_dir" -type f -name '*.json') ]]; then
-        log_warn "出力ディレクトリが空です: $pair_output_dir"
-    fi
-
-    # トリオデータを出力
-    log_info "トリオデータをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_trio_stats --output-dir "$trio_output_dir"; then
-        log_error "トリオデータのエクスポートに失敗しました"
-        exit 1
+        log_warn "出力ディクトリが空です: $pair_output_dir"
     fi
 
     if [[ ! -d "$trio_output_dir" ]]; then
@@ -308,13 +286,6 @@ main() {
         log_warn "出力ディレクトリが空です: $trio_output_dir"
     fi
 
-    # 3対3データを出力
-    log_info "3対3データをエクスポートしています"
-    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_3v3_win_rates --output-dir "$three_vs_three_output_dir"; then
-        log_error "3対3データのエクスポートに失敗しました"
-        exit 1
-    fi
-
     if [[ ! -d "$three_vs_three_output_dir" ]]; then
         log_error "出力ディレクトリが見つかりません: $three_vs_three_output_dir"
         exit 1
@@ -325,7 +296,6 @@ main() {
     if [[ -z $(find "$three_vs_three_output_dir" -type f -name '*.json') ]]; then
         log_warn "出力ディレクトリが空です: $three_vs_three_output_dir"
     fi
-
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"

@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
@@ -10,57 +11,47 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
+from .settings import DATA_RETENTION_DAYS
+from .stats_loader import StatsDataset, load_recent_ranked_battles
 
 setup_logging()
 
 
-def fetch_star_rows(conn, since: str) -> List[Tuple[int, int, int, int, int]]:
-    cursor = conn.cursor()
-    sql = """
-    WITH recent_ranks AS (
-        SELECT rl.id, rl.map_id
-        FROM rank_logs rl
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id, 1, 8) >= %s
-    ), totals AS (
-        SELECT map_id, COUNT(*) AS total_rank_logs
-        FROM recent_ranks
-        GROUP BY map_id
-    ), participants AS (
-        SELECT DISTINCT rr.id AS rank_log_id, wl.win_brawler_id AS brawler_id
-        FROM win_lose_logs wl
-        JOIN battle_logs bl ON wl.battle_log_id = bl.id
-        JOIN recent_ranks rr ON bl.rank_log_id = rr.id
-        UNION
-        SELECT DISTINCT rr.id AS rank_log_id, wl.lose_brawler_id AS brawler_id
-        FROM win_lose_logs wl
-        JOIN battle_logs bl ON wl.battle_log_id = bl.id
-        JOIN recent_ranks rr ON bl.rank_log_id = rr.id
-    ), usage AS (
-        SELECT rr.map_id,
-               p.brawler_id,
-               COUNT(DISTINCT p.rank_log_id) AS rank_logs
-        FROM participants p
-        JOIN recent_ranks rr ON p.rank_log_id = rr.id
-        GROUP BY rr.map_id, p.brawler_id
-    ), star_counts AS (
-        SELECT rr.map_id, rsl.star_brawler_id AS brawler_id, COUNT(*) AS star_count
-        FROM rank_star_logs rsl
-        JOIN recent_ranks rr ON rsl.rank_log_id = rr.id
-        GROUP BY rr.map_id, rsl.star_brawler_id
-    )
-    SELECT u.map_id,
-           u.brawler_id,
-           u.rank_logs,
-           COALESCE(sc.star_count, 0) AS star_count,
-           t.total_rank_logs
-    FROM usage u
-    JOIN totals t ON u.map_id = t.map_id
-    LEFT JOIN star_counts sc
-        ON u.map_id = sc.map_id AND u.brawler_id = sc.brawler_id
-    """
-    cursor.execute(sql, (MIN_RANK_ID, since))
-    return cursor.fetchall()
+def fetch_star_rows(dataset: StatsDataset) -> List[Tuple[int, int, int, int, int]]:
+    """共通データセットからスター取得集計を生成する."""
+
+    totals: Dict[int, int] = defaultdict(int)
+    for rank_log in dataset.rank_logs.values():
+        totals[rank_log.map_id] += 1
+
+    participants = dataset.participants_by_rank_log()
+    usage: Dict[Tuple[int, int], int] = defaultdict(int)
+    for rank_log_id, brawlers in participants.items():
+        rank_entry = dataset.rank_logs.get(rank_log_id)
+        if rank_entry is None:
+            continue
+        for brawler_id in brawlers:
+            usage[(rank_entry.map_id, brawler_id)] += 1
+
+    star_counts: Dict[Tuple[int, int], int] = defaultdict(int)
+    for rank_log_id, star_brawler_id in dataset.star_logs:
+        rank_entry = dataset.rank_logs.get(rank_log_id)
+        if rank_entry is None:
+            continue
+        star_counts[(rank_entry.map_id, star_brawler_id)] += 1
+
+    rows: List[Tuple[int, int, int, int, int]] = []
+    for (map_id, brawler_id), rank_logs in usage.items():
+        rows.append(
+            (
+                int(map_id),
+                int(brawler_id),
+                int(rank_logs),
+                int(star_counts.get((map_id, brawler_id), 0)),
+                int(totals.get(map_id, 0)),
+            )
+        )
+    return rows
 
 
 def compute_star_rates(
@@ -100,7 +91,8 @@ def main() -> None:
 
     try:
         logging.info("スター取得データを取得しています...")
-        rows = fetch_star_rows(conn, since)
+        dataset = load_recent_ranked_battles(conn, since)
+        rows = fetch_star_rows(dataset)
         logging.info("%d 行のデータを取得しました", len(rows))
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")

@@ -13,7 +13,8 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
+from .stats_loader import StatsDataset, load_recent_ranked_battles
 setup_logging()
 JST = timezone(timedelta(hours=9))
 
@@ -23,77 +24,48 @@ def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEV
     return beta.ppf(1 - confidence, alpha, beta_param)
 
 
-def fetch_matchup_stats(conn, since: str) -> List[Tuple[int, int, int, float, float]]:
-    """対キャラ勝率用の集計データを取得"""
-    cur = conn.cursor()
-    sql = """
-    WITH recent_battles AS (
-        SELECT bl.id AS battle_log_id, rl.map_id
-        FROM battle_logs bl
-        JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
-    ), pair_results AS (
-        SELECT rb.map_id, wl.win_brawler_id, wl.lose_brawler_id, COUNT(*) AS win_cnt
-        FROM win_lose_logs wl
-        JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
-        GROUP BY rb.map_id, wl.win_brawler_id, wl.lose_brawler_id
-    ), combined AS (
-        SELECT map_id, win_brawler_id AS brawler_a, lose_brawler_id AS brawler_b,
-               win_cnt AS wins, 0 AS losses
-        FROM pair_results
-        UNION ALL
-        SELECT map_id, lose_brawler_id AS brawler_a, win_brawler_id AS brawler_b,
-               0 AS wins, win_cnt AS losses
-        FROM pair_results
+def fetch_matchup_stats(dataset: StatsDataset) -> List[Tuple[int, int, int, float, float]]:
+    """共通データセットから対キャラ勝敗集計を生成する."""
+
+    stats: Dict[Tuple[int, int, int], Dict[str, float]] = defaultdict(
+        lambda: {"wins": 0.0, "losses": 0.0}
     )
-    SELECT map_id, brawler_a, brawler_b, SUM(wins) AS wins, SUM(losses) AS losses
-    FROM combined
-    GROUP BY map_id, brawler_a, brawler_b
-    """
-    cur.execute(sql, (MIN_RANK_ID, since))
-    return cur.fetchall()
+    for battle in dataset.iter_ranked_battles():
+        if not battle.win_brawlers or not battle.lose_brawlers:
+            continue
+        for winner in battle.win_brawlers:
+            for loser in battle.lose_brawlers:
+                stats[(battle.map_id, winner, loser)]["wins"] += 1.0
+                stats[(battle.map_id, loser, winner)]["losses"] += 1.0
+
+    rows: List[Tuple[int, int, int, float, float]] = []
+    for (map_id, brawler_a, brawler_b), record in stats.items():
+        rows.append((map_id, brawler_a, brawler_b, record["wins"], record["losses"]))
+    return rows
 
 
-def fetch_synergy_stats(conn, since: str) -> List[Tuple[int, int, int, float, float]]:
-    """味方キャラ同士の勝率用の集計データを取得"""
-    cur = conn.cursor()
-    sql = """
-    WITH recent_battles AS (
-        SELECT bl.id AS battle_log_id, rl.map_id
-        FROM battle_logs bl
-        JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
-    ), win_pairs AS (
-        SELECT rb.map_id, wl1.win_brawler_id AS brawler_a, wl2.win_brawler_id AS brawler_b
-        FROM win_lose_logs wl1
-        JOIN win_lose_logs wl2 ON wl1.battle_log_id = wl2.battle_log_id
-                                AND wl1.win_brawler_id < wl2.win_brawler_id
-        JOIN recent_battles rb ON wl1.battle_log_id = rb.battle_log_id
-    ), lose_pairs AS (
-        SELECT rb.map_id, wl1.lose_brawler_id AS brawler_a, wl2.lose_brawler_id AS brawler_b
-        FROM win_lose_logs wl1
-        JOIN win_lose_logs wl2 ON wl1.battle_log_id = wl2.battle_log_id
-                                AND wl1.lose_brawler_id < wl2.lose_brawler_id
-        JOIN recent_battles rb ON wl1.battle_log_id = rb.battle_log_id
-    ), win_counts AS (
-        SELECT map_id, brawler_a, brawler_b, COUNT(*) AS wins
-        FROM win_pairs
-        GROUP BY map_id, brawler_a, brawler_b
-    ), lose_counts AS (
-        SELECT map_id, brawler_a, brawler_b, COUNT(*) AS losses
-        FROM lose_pairs
-        GROUP BY map_id, brawler_a, brawler_b
-    ), combined AS (
-        SELECT map_id, brawler_a, brawler_b, wins, 0 AS losses FROM win_counts
-        UNION ALL
-        SELECT map_id, brawler_a, brawler_b, 0 AS wins, losses FROM lose_counts
+def fetch_synergy_stats(dataset: StatsDataset) -> List[Tuple[int, int, int, float, float]]:
+    """共通データセットから味方同士の勝敗集計を生成する."""
+
+    stats: Dict[Tuple[int, int, int], Dict[str, float]] = defaultdict(
+        lambda: {"wins": 0.0, "losses": 0.0}
     )
-    SELECT map_id, brawler_a, brawler_b, SUM(wins) AS wins, SUM(losses) AS losses
-    FROM combined
-    GROUP BY map_id, brawler_a, brawler_b
-    """
-    cur.execute(sql, (MIN_RANK_ID, since))
-    return cur.fetchall()
+    for battle in dataset.iter_ranked_battles():
+        if battle.win_brawlers and len(battle.win_brawlers) >= 2:
+            winners = sorted(battle.win_brawlers)
+            for i, brawler_a in enumerate(winners):
+                for brawler_b in winners[i + 1 :]:
+                    stats[(battle.map_id, brawler_a, brawler_b)]["wins"] += 1.0
+        if battle.lose_brawlers and len(battle.lose_brawlers) >= 2:
+            losers = sorted(battle.lose_brawlers)
+            for i, brawler_a in enumerate(losers):
+                for brawler_b in losers[i + 1 :]:
+                    stats[(battle.map_id, brawler_a, brawler_b)]["losses"] += 1.0
+
+    rows: List[Tuple[int, int, int, float, float]] = []
+    for (map_id, brawler_a, brawler_b), record in stats.items():
+        rows.append((map_id, brawler_a, brawler_b, record["wins"], record["losses"]))
+    return rows
 
 
 def compute_pair_rates(
@@ -161,10 +133,11 @@ def main() -> None:
 
     try:
         logging.info("対キャラデータを取得しています...")
-        matchup_rows = fetch_matchup_stats(conn, since)
+        dataset = load_recent_ranked_battles(conn, since)
+        matchup_rows = fetch_matchup_stats(dataset)
         logging.info("%d 行の対キャラデータを取得", len(matchup_rows))
         logging.info("協力データを取得しています...")
-        synergy_rows = fetch_synergy_stats(conn, since)
+        synergy_rows = fetch_synergy_stats(dataset)
         logging.info("%d 行の協力データを取得", len(synergy_rows))
     except mysql.connector.Error as e:
         raise SystemExit(f"クエリの実行に失敗しました: {e}")
