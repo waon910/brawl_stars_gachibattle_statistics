@@ -16,7 +16,7 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
 
 setup_logging()
 JST = timezone(timedelta(hours=9))
@@ -24,7 +24,7 @@ JST = timezone(timedelta(hours=9))
 MatchupRow = Tuple[int, int, int, int, int, int, int, float]
 
 
-def beta_lcb(alpha: float, beta_param: float, confidence: float = 0.95) -> float:
+def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界を計算する."""
 
     return float(beta.ppf(1 - confidence, alpha, beta_param))
@@ -121,7 +121,7 @@ def fetch_matchup_rows(conn, since: str) -> List[MatchupRow]:
 def compute_matchup_scores(
     rows: Iterable[MatchupRow],
     *,
-    confidence: float = 0.95,
+    confidence: float = CONFIDENCE_LEVEL,
     min_games: int = 0,
 ) -> Dict[int, List[Dict[str, object]]]:
     """3対3編成ごとの勝率と信頼度を計算する."""
@@ -136,12 +136,13 @@ def compute_matchup_scores(
         stats[map_id][(win_team, lose_team)] += float(wins)
 
     results: Dict[int, List[Dict[str, object]]] = {}
+    min_games_threshold = max(min_games, 4)
     for map_id, combos in stats.items():
         orientation_stats: List[Tuple[Tuple[int, int, int], Tuple[int, int, int], float, float]] = []
         for (win_team, lose_team), wins_val in combos.items():
             reverse_wins = combos.get((lose_team, win_team), 0.0)
             games = wins_val + reverse_wins
-            if games <= 0:
+            if games < min_games_threshold:
                 continue
             orientation_stats.append((win_team, lose_team, wins_val, games))
 
@@ -160,10 +161,8 @@ def compute_matchup_scores(
         alpha_prior = mean * strength
         beta_prior = (1 - mean) * strength
 
-        records: List[Dict[str, object]] = []
+        records: List[Tuple[Dict[str, object], float]] = []
         for win_team, lose_team, wins_val, games in orientation_stats:
-            if games < min_games:
-                continue
             losses_val = games - wins_val
             alpha_post = alpha_prior + wins_val
             beta_post = beta_prior + losses_val
@@ -171,17 +170,13 @@ def compute_matchup_scores(
             record = {
                 "win_brawlers": list(win_team),
                 "lose_brawlers": list(lose_team),
-                "wins": int(round(wins_val)),
-                "losses": int(round(losses_val)),
-                "games": int(round(games)),
                 "win_rate": wins_val / games if games > 0 else 0.0,
                 "win_rate_lcb": lcb,
-                "confidence": confidence,
             }
-            records.append(record)
+            records.append((record, games))
 
-        records.sort(key=lambda item: (item["win_rate_lcb"], item["games"]), reverse=True)
-        results[map_id] = records
+        records.sort(key=lambda item: (item[0]["win_rate_lcb"], item[1]), reverse=True)
+        results[map_id] = [record for record, _ in records]
 
     return results
 
@@ -209,7 +204,7 @@ def main() -> None:
     parser.add_argument(
         "--min-games",
         type=int,
-        default=0,
+        default=4,
         help="統計対象とする最低試合数",
     )
     args = parser.parse_args()
@@ -235,7 +230,11 @@ def main() -> None:
         conn.close()
 
     logging.info("勝率指標を計算しています")
-    results = compute_matchup_scores(rows, min_games=args.min_games)
+    results = compute_matchup_scores(
+        rows,
+        min_games=args.min_games,
+        confidence=CONFIDENCE_LEVEL,
+    )
 
     output_dir = Path(args.output_dir)
     logging.info("JSONを出力しています: %s", output_dir)
