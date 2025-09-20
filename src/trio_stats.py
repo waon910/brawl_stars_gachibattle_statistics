@@ -6,6 +6,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from scipy.stats import beta
 
+from .settings import MIN_RANK_ID
+
 TrioRow = Tuple[int, int, int, int, int, int, float, float]
 
 
@@ -26,7 +28,7 @@ def fetch_trio_rows(
     """指定した条件でトリオの勝敗集計を取得する."""
     cur = conn.cursor()
     conditions: List[str] = []
-    params: List[object] = []
+    params: List[object] = [MIN_RANK_ID]
 
     if since is not None:
         conditions.append("SUBSTRING(rl.id,1,8) >= %s")
@@ -57,7 +59,7 @@ def fetch_trio_rows(
             FROM battle_logs bl
             JOIN rank_logs rl ON bl.rank_log_id = rl.id
             JOIN _maps m ON rl.map_id = m.id
-            WHERE rl.rank_id >= 4{condition_sql}
+            WHERE rl.rank_id >= %s{condition_sql}
         ),
         win_brawlers AS (
             SELECT DISTINCT wl.battle_log_id, wl.win_brawler_id AS brawler_id

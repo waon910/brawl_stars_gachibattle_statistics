@@ -16,6 +16,7 @@ STAR_RATE_FILE_NAME="star_rates.json"
 RANK_MATCH_COUNT_FILE_NAME="rank_match_counts.json"
 PAIR_STATS_DIR_NAME="pair_stats"
 TRIO_STATS_DIR_NAME="trio_stats"
+THREE_VS_THREE_STATS_DIR_NAME="three_vs_three_stats"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 ENV_FILE="${BASE_DIR}/config/settings.env"
 LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
@@ -204,6 +205,7 @@ main() {
     local rank_match_output_file="${OUTPUT_DIR}/${RANK_MATCH_COUNT_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
     local trio_output_dir="${OUTPUT_DIR}/${TRIO_STATS_DIR_NAME}"
+    local three_vs_three_output_dir="${OUTPUT_DIR}/${THREE_VS_THREE_STATS_DIR_NAME}"
     
     log_info "対象期間: ${start_date} から ${end_date}"
     
@@ -306,12 +308,31 @@ main() {
         log_warn "出力ディレクトリが空です: $trio_output_dir"
     fi
 
+    # 3対3データを出力
+    log_info "3対3データをエクスポートしています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.export_3v3_win_rates --output-dir "$three_vs_three_output_dir"; then
+        log_error "3対3データのエクスポートに失敗しました"
+        exit 1
+    fi
+
+    if [[ ! -d "$three_vs_three_output_dir" ]]; then
+        log_error "出力ディレクトリが見つかりません: $three_vs_three_output_dir"
+        exit 1
+    fi
+
+    log_info "出力ディレクトリを生成しました: $three_vs_three_output_dir"
+
+    if [[ -z $(find "$three_vs_three_output_dir" -type f -name '*.json') ]]; then
+        log_warn "出力ディレクトリが空です: $three_vs_three_output_dir"
+    fi
+
     # アプリディレクトリへのコピー
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"
     local destination_rank_match="${APP_DIR}${COPY_PATH}${RANK_MATCH_COUNT_FILE_NAME}"
     local destination_pair_stats="${APP_DIR}${COPY_PATH2}${PAIR_STATS_DIR_NAME}"
     local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
+    local destination_three_vs_three_stats="${APP_DIR}${COPY_PATH}${THREE_VS_THREE_STATS_DIR_NAME}"
     log_info "ファイルをアプリケーションディレクトリにコピーしています"
 
     if ! cp "$output_file" "$destination_win_rate"; then
@@ -336,6 +357,11 @@ main() {
 
     if ! rsync -av --delete "$trio_output_dir/" "$destination_trio_stats/"; then
         log_error "trio_statsフォルダのコピーに失敗しました"
+        exit 1
+    fi
+
+    if ! rsync -av --delete "$three_vs_three_output_dir/" "$destination_three_vs_three_stats/"; then
+        log_error "three_vs_three_statsフォルダのコピーに失敗しました"
         exit 1
     fi
 

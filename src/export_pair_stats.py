@@ -13,7 +13,7 @@ from scipy.stats import beta
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS
+from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
 setup_logging()
 JST = timezone(timedelta(hours=9))
 
@@ -31,7 +31,7 @@ def fetch_matchup_stats(conn, since: str) -> List[Tuple[int, int, int, float, fl
         SELECT bl.id AS battle_log_id, rl.map_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= 4 AND SUBSTRING(rl.id,1,8) >= %s
+        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
     ), pair_results AS (
         SELECT rb.map_id, wl.win_brawler_id, wl.lose_brawler_id, COUNT(*) AS win_cnt
         FROM win_lose_logs wl
@@ -50,7 +50,7 @@ def fetch_matchup_stats(conn, since: str) -> List[Tuple[int, int, int, float, fl
     FROM combined
     GROUP BY map_id, brawler_a, brawler_b
     """
-    cur.execute(sql, (since,))
+    cur.execute(sql, (MIN_RANK_ID, since))
     return cur.fetchall()
 
 
@@ -62,7 +62,7 @@ def fetch_synergy_stats(conn, since: str) -> List[Tuple[int, int, int, float, fl
         SELECT bl.id AS battle_log_id, rl.map_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= 4 AND SUBSTRING(rl.id,1,8) >= %s
+        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id,1,8) >= %s
     ), win_pairs AS (
         SELECT rb.map_id, wl1.win_brawler_id AS brawler_a, wl2.win_brawler_id AS brawler_b
         FROM win_lose_logs wl1
@@ -92,7 +92,7 @@ def fetch_synergy_stats(conn, since: str) -> List[Tuple[int, int, int, float, fl
     FROM combined
     GROUP BY map_id, brawler_a, brawler_b
     """
-    cur.execute(sql, (since,))
+    cur.execute(sql, (MIN_RANK_ID, since))
     return cur.fetchall()
 
 

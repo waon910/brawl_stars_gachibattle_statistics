@@ -1,4 +1,4 @@
-"""ランクごとのランクマッチ数をJSONとして出力するスクリプト."""
+"""指定ランク以上のランクマッチ数をJSONとして出力するスクリプト."""
 
 import argparse
 import json
@@ -9,8 +9,7 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-
-DIAMOND_RANK_ID = 4
+from .settings import MIN_RANK_ID
 
 
 class RankMatchCount(TypedDict):
@@ -26,7 +25,7 @@ setup_logging()
 
 
 def fetch_rank_match_counts(conn) -> List[RankMatchCount]:
-    """ダイヤモンド以上のランクごとのランクマッチ数を取得する."""
+    """設定された最低ランク以上のランクごとのランクマッチ数を取得する."""
 
     query = """
         SELECT
@@ -42,7 +41,7 @@ def fetch_rank_match_counts(conn) -> List[RankMatchCount]:
     """
 
     cursor = conn.cursor()
-    cursor.execute(query, (DIAMOND_RANK_ID,))
+    cursor.execute(query, (MIN_RANK_ID,))
     results: List[RankMatchCount] = []
     for rank_id, name, name_ja, rank_log_count in cursor.fetchall():
         results.append(
@@ -58,7 +57,7 @@ def fetch_rank_match_counts(conn) -> List[RankMatchCount]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="ダイヤモンド以上のランクマッチ数をJSONとして出力"
+        description="設定ランク以上のランクマッチ数をJSONとして出力"
     )
     parser.add_argument(
         "--output",
