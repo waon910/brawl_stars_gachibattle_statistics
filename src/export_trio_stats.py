@@ -13,7 +13,7 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 from .trio_stats import compute_trio_scores, fetch_trio_rows
 
 setup_logging()
@@ -72,7 +72,11 @@ def main() -> None:
         conn.close()
 
     logging.info("勝率指標を計算しています")
-    results = compute_trio_scores(rows, group_by_rank=False)
+    results = compute_trio_scores(
+        rows,
+        group_by_rank=False,
+        confidence=CONFIDENCE_LEVEL,
+    )
     output_dir = Path(args.output_dir)
     logging.info("JSONを出力しています: %s", output_dir)
     export_trio_json(results, output_dir)
