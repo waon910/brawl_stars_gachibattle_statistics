@@ -13,6 +13,7 @@ DEFAULT_ENV_FILE = BASE_DIR / "config" / "settings.env"
 LOCAL_ENV_FILE = BASE_DIR / ".env.local"
 _DEFAULT_RETENTION_DAYS = 30
 _DEFAULT_MIN_RANK_ID = 4
+_DEFAULT_CONFIDENCE_LEVEL = 0.9
 
 
 @lru_cache(maxsize=1)
@@ -36,5 +37,20 @@ def _get_int_env(name: str, default: int) -> int:
         ) from exc
 
 
+def _get_float_env(name: str, default: float) -> float:
+    """環境変数を浮動小数点数として取得する。"""
+    load_environment()
+    value = os.getenv(name)
+    if value in (None, ""):
+        return default
+    try:
+        return float(value)
+    except ValueError as exc:  # pragma: no cover - エラーハンドリングのための保険
+        raise ValueError(
+            f"環境変数 {name} は浮動小数点数である必要があります (現在の値: {value})"
+        ) from exc
+
+
 DATA_RETENTION_DAYS = _get_int_env("DATA_RETENTION_DAYS", _DEFAULT_RETENTION_DAYS)
 MIN_RANK_ID = _get_int_env("MIN_RANK_ID", _DEFAULT_MIN_RANK_ID)
+CONFIDENCE_LEVEL = _get_float_env("CONFIDENCE_LEVEL", _DEFAULT_CONFIDENCE_LEVEL)

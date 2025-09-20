@@ -1,7 +1,7 @@
 """マップIDごとのキャラクタータグ勝率をJSON形式で出力するスクリプト.
 
 設定された日数の範囲で行われた設定ランク以上の試合を対象とし、
-勝率はEmpirical Bayes(Beta-Binomial)による縮約と95%下側信頼区間(LCB)で算出する。
+勝率はEmpirical Bayes(Beta-Binomial)による縮約と90%下側信頼区間(LCB)で算出する。
 """
 
 import argparse
@@ -16,7 +16,7 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
+from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS, MIN_RANK_ID
 
 # Monte Carloサンプリング数
 SAMPLE_SIZE = 10000
@@ -24,7 +24,7 @@ random.seed(0)
 setup_logging()
 
 
-def beta_lcb(alpha: float, beta: float, confidence: float = 0.95) -> float:
+def beta_lcb(alpha: float, beta: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界をモンテカルロ法で近似する"""
     samples = [random.betavariate(alpha, beta) for _ in range(SAMPLE_SIZE)]
     samples.sort()
@@ -75,7 +75,9 @@ def fetch_stats(conn, since: str) -> List[tuple]:
     return cur.fetchall()
 
 
-def compute_win_rates(rows: List[tuple]) -> Dict[int, Dict[int, float]]:
+def compute_win_rates(
+    rows: List[tuple], *, confidence: float = CONFIDENCE_LEVEL
+) -> Dict[int, Dict[int, float]]:
     logging.info("データを集計しています...")
     # map_id -> brawler_tag -> {wins, games}
     stats: Dict[int, Dict[int, Dict[str, float]]] = defaultdict(
@@ -109,7 +111,7 @@ def compute_win_rates(rows: List[tuple]) -> Dict[int, Dict[int, float]]:
         for brawler_id, val in brawlers.items():
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
-            lcb = beta_lcb(alpha_post, beta_post)
+            lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
             map_result[brawler_id] = lcb
         results[map_id] = map_result
     return results
@@ -138,7 +140,7 @@ def main() -> None:
     finally:
         conn.close()
 
-    result = compute_win_rates(rows)
+    result = compute_win_rates(rows, confidence=CONFIDENCE_LEVEL)
     logging.info("JSONファイルに書き込んでいます: %s", args.output)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)

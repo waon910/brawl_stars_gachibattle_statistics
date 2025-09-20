@@ -6,12 +6,12 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from scipy.stats import beta
 
-from .settings import MIN_RANK_ID
+from .settings import CONFIDENCE_LEVEL, MIN_RANK_ID
 
 TrioRow = Tuple[int, int, int, int, int, int, float, float]
 
 
-def beta_lcb(alpha: float, beta_param: float, confidence: float = 0.95) -> float:
+def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布に基づく下側信頼限界を計算する."""
     return float(beta.ppf(1 - confidence, alpha, beta_param))
 
@@ -141,7 +141,7 @@ def compute_trio_scores(
     *,
     group_by_rank: bool = True,
     min_games: int = 0,
-    confidence: float = 0.95,
+    confidence: float = CONFIDENCE_LEVEL,
 ) -> Dict[int, Dict[Optional[int], List[Dict[str, object]]]]:
     """トリオ勝率の指標値を計算する."""
 
