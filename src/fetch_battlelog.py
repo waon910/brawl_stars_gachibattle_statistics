@@ -29,9 +29,9 @@ ACQ_CYCLE_TIME = 6
 # トロフィー境界
 TROPHIE_BORDER = 80000
 # 一度に取得するプレイヤー数
-FETCH_BATCH_SIZE = 5
+FETCH_BATCH_SIZE = 10
 # 並列取得時の最大ワーカー数
-MAX_WORKERS = 5
+MAX_WORKERS = 10
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
