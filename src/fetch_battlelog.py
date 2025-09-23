@@ -5,11 +5,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 from mysql.connector import IntegrityError, errorcode
 
 import mysql.connector
 import requests
+from requests.adapters import HTTPAdapter
 from dateutil.parser import parse
 from urllib.parse import quote
 
@@ -32,6 +33,24 @@ TROPHIE_BORDER = 80000
 FETCH_BATCH_SIZE = 10
 # 並列取得時の最大ワーカー数
 MAX_WORKERS = 10
+# API リクエストのタイムアウト (接続タイムアウト, 読み取りタイムアウト)
+REQUEST_TIMEOUT = (5, 30)
+
+
+def _create_http_session() -> requests.Session:
+    session = requests.Session()
+    adapter = HTTPAdapter(
+        pool_connections=MAX_WORKERS * 2,
+        pool_maxsize=MAX_WORKERS * 2,
+        max_retries=0,
+    )
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.trust_env = False
+    return session
+
+
+SESSION = _create_http_session()
 
 # 逆結果マップ
 OPPOSITE = {"victory": "defeat", "defeat": "victory"}
@@ -51,21 +70,44 @@ def request_with_retry(
     url: str,
     headers: Optional[dict[str, str]] = None,
     method: str = "GET",
-    timeout: int = 15,
+    timeout: Optional[Sequence[float] | float] = None,
     max_retries: int = MAX_RETRIES,
     request_interval: float = REQUEST_INTERVAL,
 ) -> Optional[requests.Response]:
     """API にリクエストを送り、失敗した場合はリトライを行う汎用関数"""
 
+    if timeout is None:
+        timeout_values: Tuple[float, float] = REQUEST_TIMEOUT
+    elif isinstance(timeout, (int, float)):
+        timeout_values = (float(timeout), float(timeout))
+    else:
+        timeout_seq = tuple(timeout)
+        if len(timeout_seq) != 2:
+            raise ValueError("timeout は (connect, read) の2要素で指定してください。")
+        timeout_values = (float(timeout_seq[0]), float(timeout_seq[1]))
+
     for attempt in range(1, max_retries + 1):
         try:
             time.sleep(request_interval)
-            resp = requests.request(method, url, headers=headers, timeout=timeout)
+            resp = SESSION.request(
+                method,
+                url,
+                headers=headers,
+                timeout=timeout_values,
+            )
             if resp.status_code == 404:
                 logger.warning("Resource not found: %s", url)
                 return None
             resp.raise_for_status()
             return resp
+        except requests.Timeout as e:
+            logger.warning(
+                "Timeout while requesting %s (attempt %d/%d): %s",
+                url,
+                attempt,
+                max_retries,
+                e,
+            )
         except requests.RequestException as e:
             if attempt == max_retries:
                 logger.error("Request failed: %s", e)
@@ -79,6 +121,8 @@ def request_with_retry(
                 wait,
             )
             time.sleep(wait)
+        except KeyboardInterrupt:
+            raise
 
 
 def cleanup_old_logs(conn) -> int:
