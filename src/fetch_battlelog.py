@@ -326,7 +326,12 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                         cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                         if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
                             new_players += 1
-                            logger.info("マスターランク発見:%s", p_tag)
+                            if trophies == 22:
+                                logger.info("プロランク発見:%s", p_tag)
+                            if trophies > 18:
+                                logger.info("マスターランク発見:%s", p_tag)
+                            if trophies > 15:
+                                logger.info("レジェンドランク発見:%s", p_tag)
                         if player_name:
                             cur.execute(
                                 "UPDATE players SET name=%s WHERE tag=%s AND (name IS NULL OR name='')",
