@@ -30,17 +30,6 @@ CREATE TABLE IF NOT EXISTS _brawlers (
     name_ja VARCHAR(255) UNIQUE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS brawler_used_ranks (
-    brawler_id INT NOT NULL,
-    map_id INT NOT NULL,
-    rank_id INT NOT NULL,
-    count INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (brawler_id, map_id, rank_id),
-    FOREIGN KEY (brawler_id) REFERENCES _brawlers(id),
-    FOREIGN KEY (map_id) REFERENCES _maps(id),
-    FOREIGN KEY (rank_id) REFERENCES _ranks(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS rank_logs (
     id VARCHAR(50) PRIMARY KEY,
     map_id INT NOT NULL,
