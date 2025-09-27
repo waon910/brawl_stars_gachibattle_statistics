@@ -397,22 +397,6 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                         "ON DUPLICATE KEY UPDATE star_brawler_id=VALUES(star_brawler_id)",
                         (rank_log_id, star_brawler_id),
                     )
-                for rlog in resultInfo:
-                    for brawler_id in rlog.brawlers:
-                        cur.execute(
-                            "SELECT count FROM brawler_used_ranks WHERE brawler_id=%s AND map_id=%s AND rank_id=%s",
-                            (brawler_id, map_id, rank_id),
-                        )
-                        if cur.fetchone():
-                            cur.execute(
-                                "UPDATE brawler_used_ranks SET count = count + 1 WHERE brawler_id=%s AND map_id=%s AND rank_id=%s",
-                                (brawler_id, map_id, rank_id),
-                            )
-                        else:
-                            cur.execute(
-                                "INSERT INTO brawler_used_ranks(brawler_id, map_id, rank_id, count) VALUES (%s, %s, %s, 1)",
-                                (brawler_id, map_id, rank_id),
-                            )
                 new_rank_brawlers_flag = False
 
             #新規バトル登録
