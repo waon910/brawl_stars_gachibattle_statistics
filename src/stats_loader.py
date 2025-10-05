@@ -73,14 +73,19 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
 
     logger.info("ランクログ情報を読み込んでいます")
     rank_logs: Dict[str, RankLogEntry] = {}
+    # NOTE: rank_logs.id は日付8桁+連番の文字列であり、プレフィックス順に
+    # 並ぶため、単純な文字列比較で対象期間以降を効率よく抽出できる。
+    # SUBSTRING を使うとインデックスが効かず巨大テーブルの全走査が発生し
+    # ていたため、ここでは下限値の文字列比較に置き換えている。
+    rank_log_id_lower_bound = since
     cursor.execute(
         """
         SELECT rl.id, rl.map_id, rl.rank_id, m.mode_id
         FROM rank_logs rl
         LEFT JOIN _maps m ON rl.map_id = m.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id, 1, 8) >= %s
+        WHERE rl.rank_id >= %s AND rl.id >= %s
         """,
-        (MIN_RANK_ID, since),
+        (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     for rl_id, map_id, rank_id, mode_id in cursor.fetchall():
         rl_id_str = str(rl_id)
@@ -98,9 +103,9 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         SELECT bl.id, bl.rank_log_id
         FROM battle_logs bl
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id, 1, 8) >= %s
+        WHERE rl.rank_id >= %s AND rl.id >= %s
         """,
-        (MIN_RANK_ID, since),
+        (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     battle_rank_map: Dict[str, str] = {}
     for battle_log_id, rank_log_id in cursor.fetchall():
@@ -113,9 +118,9 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         FROM win_lose_logs wl
         JOIN battle_logs bl ON wl.battle_log_id = bl.id
         JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id, 1, 8) >= %s
+        WHERE rl.rank_id >= %s AND rl.id >= %s
         """,
-        (MIN_RANK_ID, since),
+        (MIN_RANK_ID, rank_log_id_lower_bound),
     )
 
     def _team_factory() -> Dict[str, Set[int]]:
@@ -135,9 +140,9 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         SELECT rsl.rank_log_id, rsl.star_brawler_id
         FROM rank_star_logs rsl
         JOIN rank_logs rl ON rsl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND SUBSTRING(rl.id, 1, 8) >= %s
+        WHERE rl.rank_id >= %s AND rl.id >= %s
         """,
-        (MIN_RANK_ID, since),
+        (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     star_logs: List[Tuple[str, int]] = []
     for rank_log_id, star_brawler_id in cursor.fetchall():
