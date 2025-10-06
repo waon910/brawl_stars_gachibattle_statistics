@@ -5,4 +5,4 @@ SELECT
 FROM
     rank_logs AS rl
 WHERE
-    SUBSTRING(rl.id, 1, 8) BETWEEN ? AND DATE_FORMAT(CURRENT_DATE, '%Y%m%d');
+    rl.id >= "20250805";
