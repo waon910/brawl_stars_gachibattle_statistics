@@ -337,9 +337,6 @@ main() {
 
     # Git操作
     git_operations "$destination_win_rate" "$destination_star_rate" "$destination_pair_stats" "$destination_trio_stats" "$end_date"
-
-    # 古い出力ファイルのクリーンアップ（設定期間より古いファイルを削除）
-    find "$OUTPUT_DIR" -name "win_rates_*.json" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
     
     log_info "アプリケーションの更新が正常に完了しました"
 }

@@ -69,7 +69,7 @@ def compute_win_rates(
     results: Dict[int, Dict[int, Dict[str, float]]] = {}
     total_maps = len(stats)
     for idx, (map_id, brawlers) in enumerate(stats.items(), 1):
-        logging.info("%d/%d %s を処理中", idx, total_maps, map_id)
+        # logging.info("%d/%d %s を処理中", idx, total_maps, map_id)
         total_wins = sum(v["wins"] for v in brawlers.values())
         total_games = sum(v["games"] for v in brawlers.values())
         if total_games == 0 or len(brawlers) == 0:
