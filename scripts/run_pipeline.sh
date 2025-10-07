@@ -320,17 +320,17 @@ main() {
         exit 1
     fi
 
-    if ! rsync -av --delete "$pair_output_dir/" "$destination_pair_stats/"; then
+    if ! rsync -a --delete "$pair_output_dir/" "$destination_pair_stats/"; then
         log_error "pair_statsフォルダのコピーに失敗しました"
         exit 1
     fi
 
-    if ! rsync -av --delete "$trio_output_dir/" "$destination_trio_stats/"; then
+    if ! rsync -a --delete "$trio_output_dir/" "$destination_trio_stats/"; then
         log_error "trio_statsフォルダのコピーに失敗しました"
         exit 1
     fi
 
-    if ! rsync -av --delete "$three_vs_three_output_dir/" "$destination_three_vs_three_stats/"; then
+    if ! rsync -a --delete "$three_vs_three_output_dir/" "$destination_three_vs_three_stats/"; then
         log_error "three_vs_three_statsフォルダのコピーに失敗しました"
         exit 1
     fi
