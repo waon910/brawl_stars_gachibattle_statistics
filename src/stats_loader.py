@@ -154,6 +154,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     cursor.close()
 
     battles: List[RankedBattle] = []
+    participants: Dict[str, Set[int]] = defaultdict(set)
     for battle_log_id, rank_log_id in battle_rank_map.items():
         rank_entry = rank_logs.get(rank_log_id)
         if rank_entry is None:
@@ -163,9 +164,13 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         lose_team: Tuple[int, ...] = ()
         if teams:
             if teams["win"]:
-                win_team = tuple(sorted(int(b) for b in teams["win"]))
+                win_members = {int(b) for b in teams["win"]}
+                win_team = tuple(sorted(win_members))
+                participants[rank_log_id].update(win_members)
             if teams["lose"]:
-                lose_team = tuple(sorted(int(b) for b in teams["lose"]))
+                lose_members = {int(b) for b in teams["lose"]}
+                lose_team = tuple(sorted(lose_members))
+                participants[rank_log_id].update(lose_members)
         battles.append(
             RankedBattle(
                 battle_log_id=battle_log_id,
@@ -178,6 +183,10 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
             )
         )
 
+    dataset = StatsDataset(rank_logs=rank_logs, battles=battles, star_logs=star_logs)
+    if participants:
+        dataset._participants_cache = {k: set(v) for k, v in participants.items()}
+
     logger.info("ランクログ: %d件, バトル: %d件を読み込みました", len(rank_logs), len(battles))
-    return StatsDataset(rank_logs=rank_logs, battles=battles, star_logs=star_logs)
+    return dataset
 
