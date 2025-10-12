@@ -70,12 +70,125 @@ CREATE TABLE IF NOT EXISTS win_lose_logs (
     FOREIGN KEY (battle_log_id) REFERENCES battle_logs(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
-CREATE INDEX idx_battle_logs_rank_log_id_id ON battle_logs(rank_log_id, id);
-CREATE INDEX idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
-CREATE INDEX idx_rank_logs_rank_id_id ON rank_logs(rank_id, id);
-CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs(star_brawler_id);
-CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
-CREATE INDEX idx_battle_participants_side ON battle_participants(team_side, brawler_id, battle_log_id);
-CREATE INDEX idx_battle_participants_battle ON battle_participants(battle_log_id, team_side);
+SET @schema_name := DATABASE();
+
+-- idx_battle_logs_rank_log_id
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'battle_logs'
+  AND index_name = 'idx_battle_logs_rank_log_id';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs (rank_log_id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_battle_logs_rank_log_id_id
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'battle_logs'
+  AND index_name = 'idx_battle_logs_rank_log_id_id';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_battle_logs_rank_log_id_id ON battle_logs (rank_log_id, id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_rank_logs_rank_map
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'rank_logs'
+  AND index_name = 'idx_rank_logs_rank_map';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_rank_logs_rank_map ON rank_logs (rank_id, map_id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_rank_logs_rank_id_id
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'rank_logs'
+  AND index_name = 'idx_rank_logs_rank_id_id';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_rank_logs_rank_id_id ON rank_logs (rank_id, id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_rank_star_logs_brawler
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'rank_star_logs'
+  AND index_name = 'idx_rank_star_logs_brawler';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs (star_brawler_id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_win_lose_logs_battle_log_id
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'win_lose_logs'
+  AND index_name = 'idx_win_lose_logs_battle_log_id';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs (battle_log_id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_battle_participants_side
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'battle_participants'
+  AND index_name = 'idx_battle_participants_side';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_battle_participants_side ON battle_participants (team_side, brawler_id, battle_log_id)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- idx_battle_participants_battle
+SELECT COUNT(1) INTO @index_exists
+FROM information_schema.statistics
+WHERE table_schema = @schema_name
+  AND table_name = 'battle_participants'
+  AND index_name = 'idx_battle_participants_battle';
+SET @ddl := IF(
+    @index_exists = 0,
+    'CREATE INDEX idx_battle_participants_battle ON battle_participants (battle_log_id, team_side)',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
