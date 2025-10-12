@@ -135,6 +135,10 @@ def cleanup_old_logs(conn) -> int:
         return 0
     placeholders = ",".join("%s" for _ in old_rank_ids)
     cur.execute(
+        f"DELETE FROM battle_participants WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
+        old_rank_ids,
+    )
+    cur.execute(
         f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
         old_rank_ids,
     )
@@ -416,13 +420,23 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                 )
                 continue
 
-            winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
-            losers = [b for r in resultInfo if r.result == "defeat" for b in r.brawlers]
+            winners = {b for r in resultInfo if r.result == "victory" for b in r.brawlers}
+            losers = {b for r in resultInfo if r.result == "defeat" for b in r.brawlers}
             pairs = {(w, l, battle_log_id) for w in winners for l in losers}
             if pairs:
                 cur.executemany(
                     "INSERT IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (%s, %s, %s)",
                     list(pairs),
+                )
+            participant_rows = []
+            if winners:
+                participant_rows.extend((battle_log_id, "win", w) for w in winners)
+            if losers:
+                participant_rows.extend((battle_log_id, "lose", l) for l in losers)
+            if participant_rows:
+                cur.executemany(
+                    "INSERT IGNORE INTO battle_participants(battle_log_id, team_side, brawler_id) VALUES (%s, %s, %s)",
+                    participant_rows,
                 )
 
         conn.commit()

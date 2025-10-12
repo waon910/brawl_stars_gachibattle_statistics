@@ -85,20 +85,16 @@ def brawler_usage(
     """指定した階層でのキャラ使用率を集計する"""
     query = (
         "SELECT b.name_ja AS brawler, COUNT(*) AS count "
-        "FROM ("
-        " SELECT DISTINCT win_brawler_id AS brawler_id, battle_log_id FROM win_lose_logs"
-        " UNION ALL"
-        " SELECT DISTINCT lose_brawler_id AS brawler_id, battle_log_id FROM win_lose_logs"
-        ") wl "
-        "JOIN battle_logs bl ON wl.battle_log_id = bl.id "
+        "FROM battle_participants bp "
+        "JOIN battle_logs bl ON bp.battle_log_id = bl.id "
         "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
         "JOIN _maps m ON rl.map_id = m.id "
-        "JOIN _brawlers b ON wl.brawler_id = b.id WHERE 1=1"
+        "JOIN _brawlers b ON bp.brawler_id = b.id WHERE 1=1"
     )
     params: list = []
     if season_id is not None:
         start, next_start = season_range(season_id)
-        query += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
+        query += " AND rl.id >= %s AND rl.id < %s"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
     if rank_id is not None:
         query += " AND rl.rank_id=%s"
@@ -126,15 +122,15 @@ def brawler_usage(
 def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
     """指定した階層でのキャラ勝率を集計する"""
     base = (
-        "FROM win_lose_logs w "
-        "JOIN battle_logs bl ON w.battle_log_id = bl.id "
+        "FROM battle_participants bp "
+        "JOIN battle_logs bl ON bp.battle_log_id = bl.id "
         "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
         "JOIN _maps m ON rl.map_id = m.id WHERE 1=1"
     )
     params: list = []
     if season_id is not None:
         start, next_start = season_range(season_id)
-        base += " AND SUBSTRING(bl.id,1,8) >= %s AND SUBSTRING(bl.id,1,8) < %s"
+        base += " AND rl.id >= %s AND rl.id < %s"
         params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
     if rank_id is not None:
         base += " AND rl.rank_id=%s"
@@ -146,26 +142,28 @@ def brawler_win_rate(season_id=None, rank_id=None, mode_id=None, map_id=None):
         base += " AND rl.map_id=%s"
         params.append(map_id)
     with get_engine().connect() as conn:
-        wins = pd.read_sql_query(
-            "SELECT w.win_brawler_id AS brawler_id, COUNT(*) AS wins "
+        stats = pd.read_sql_query(
+            "SELECT bp.brawler_id, "
+            "SUM(CASE WHEN bp.team_side = 'win' THEN 1 ELSE 0 END) AS wins, "
+            "SUM(CASE WHEN bp.team_side = 'lose' THEN 1 ELSE 0 END) AS losses "
             + base
-            + " GROUP BY w.win_brawler_id",
-            conn,
-            params=tuple(params) if params else None,
-        )
-        losses = pd.read_sql_query(
-            "SELECT w.lose_brawler_id AS brawler_id, COUNT(*) AS losses "
-            + base
-            + " GROUP BY w.lose_brawler_id",
+            + " GROUP BY bp.brawler_id",
             conn,
             params=tuple(params) if params else None,
         )
         brawlers = pd.read_sql_query("SELECT id, name_ja FROM _brawlers", conn)
-    df = pd.merge(wins, losses, on="brawler_id", how="outer").fillna(0)
-    df["total"] = df["wins"] + df["losses"]
-    df["win_rate"] = (df["wins"] / df["total"]) * 100
-    df = df.merge(brawlers, left_on="brawler_id", right_on="id").drop("id", axis=1)
-    return df.rename(columns={"name_ja": "brawler"}).sort_values("win_rate", ascending=False)
+    if stats.empty:
+        stats = pd.DataFrame(columns=["brawler_id", "wins", "losses", "total", "win_rate"])
+    else:
+        stats["total"] = stats["wins"] + stats["losses"]
+        nonzero = stats["total"] > 0
+        stats["win_rate"] = 0.0
+        stats.loc[nonzero, "win_rate"] = (
+            stats.loc[nonzero, "wins"] / stats.loc[nonzero, "total"]
+        ) * 100
+    stats = stats.merge(brawlers, left_on="brawler_id", right_on="id", how="left").fillna({"name_ja": ""})
+    stats = stats.drop("id", axis=1)
+    return stats.rename(columns={"name_ja": "brawler"}).sort_values("win_rate", ascending=False)
 
 
 def brawler_star_rate(season_id=None, rank_id=None, mode_id=None, map_id=None) -> pd.DataFrame:

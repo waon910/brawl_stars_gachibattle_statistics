@@ -7,6 +7,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
+from mysql.connector import ProgrammingError, errorcode
+
 from .settings import MIN_RANK_ID
 
 logger = logging.getLogger(__name__)
@@ -66,10 +68,69 @@ class StatsDataset:
         return self._participants_cache
 
 
+def _load_battle_teams_from_participants(conn, since: str) -> Dict[str, Dict[str, Set[int]]]:
+    """battle_participants テーブルから勝敗別の参加者集合を読み込む."""
+
+    cursor = conn.cursor(buffered=False)
+    try:
+        cursor.execute(
+            """
+            SELECT bp.battle_log_id, bp.team_side, bp.brawler_id
+            FROM battle_participants bp
+            JOIN battle_logs bl ON bp.battle_log_id = bl.id
+            JOIN rank_logs rl ON bl.rank_log_id = rl.id
+            WHERE rl.rank_id >= %s AND rl.id >= %s
+            """,
+            (MIN_RANK_ID, since),
+        )
+    except ProgrammingError:
+        cursor.close()
+        raise
+
+    battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(
+        lambda: {"win": set(), "lose": set()}
+    )
+    for battle_log_id, team_side, brawler_id in cursor:
+        battle_id = str(battle_log_id)
+        side = team_side.decode() if isinstance(team_side, bytes) else str(team_side)
+        battle_teams[battle_id][side].add(int(brawler_id))
+    cursor.close()
+    return battle_teams
+
+
+def _load_battle_teams_from_win_lose(
+    conn, since: str, battle_rank_map: Dict[str, str]
+) -> Dict[str, Dict[str, Set[int]]]:
+    """win_lose_logs を利用した後方互換用の参加者読み込み."""
+
+    cursor = conn.cursor(buffered=False)
+    cursor.execute(
+        """
+        SELECT wl.battle_log_id, wl.win_brawler_id, wl.lose_brawler_id
+        FROM win_lose_logs wl
+        JOIN battle_logs bl ON wl.battle_log_id = bl.id
+        JOIN rank_logs rl ON bl.rank_log_id = rl.id
+        WHERE rl.rank_id >= %s AND rl.id >= %s
+        """,
+        (MIN_RANK_ID, since),
+    )
+
+    def _team_factory() -> Dict[str, Set[int]]:
+        return {"win": set(), "lose": set()}
+
+    battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(_team_factory)
+    for battle_log_id, win_brawler_id, lose_brawler_id in cursor:
+        battle_id = str(battle_log_id)
+        if battle_id not in battle_rank_map:
+            continue
+        battle_teams[battle_id]["win"].add(int(win_brawler_id))
+        battle_teams[battle_id]["lose"].add(int(lose_brawler_id))
+    cursor.close()
+    return battle_teams
+
+
 def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     """直近期間のランクマッチ関連データをまとめて読み込む."""
-
-    cursor = conn.cursor()
 
     logger.info("ランクログ情報を読み込んでいます")
     rank_logs: Dict[str, RankLogEntry] = {}
@@ -78,6 +139,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     # SUBSTRING を使うとインデックスが効かず巨大テーブルの全走査が発生し
     # ていたため、ここでは下限値の文字列比較に置き換えている。
     rank_log_id_lower_bound = since
+    cursor = conn.cursor(buffered=False)
     cursor.execute(
         """
         SELECT rl.id, rl.map_id, rl.rank_id, m.mode_id
@@ -87,7 +149,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         """,
         (MIN_RANK_ID, rank_log_id_lower_bound),
     )
-    for rl_id, map_id, rank_id, mode_id in cursor.fetchall():
+    for rl_id, map_id, rank_id, mode_id in cursor:
         rl_id_str = str(rl_id)
         rank_logs[rl_id_str] = RankLogEntry(
             id=rl_id_str,
@@ -96,8 +158,10 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
             mode_id=int(mode_id) if mode_id is not None else None,
             date_key=rl_id_str[:8],
         )
+    cursor.close()
 
     logger.info("バトルログ情報を読み込んでいます")
+    cursor = conn.cursor(buffered=False)
     cursor.execute(
         """
         SELECT bl.id, bl.rank_log_id
@@ -108,33 +172,28 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     battle_rank_map: Dict[str, str] = {}
-    for battle_log_id, rank_log_id in cursor.fetchall():
+    for battle_log_id, rank_log_id in cursor:
         battle_rank_map[str(battle_log_id)] = str(rank_log_id)
+    cursor.close()
 
-    logger.info("勝敗ログを読み込んでいます")
-    cursor.execute(
-        """
-        SELECT wl.battle_log_id, wl.win_brawler_id, wl.lose_brawler_id
-        FROM win_lose_logs wl
-        JOIN battle_logs bl ON wl.battle_log_id = bl.id
-        JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND rl.id >= %s
-        """,
-        (MIN_RANK_ID, rank_log_id_lower_bound),
-    )
-
-    def _team_factory() -> Dict[str, Set[int]]:
-        return {"win": set(), "lose": set()}
-
-    battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(_team_factory)
-    for battle_log_id, win_brawler_id, lose_brawler_id in cursor.fetchall():
-        battle_id = str(battle_log_id)
-        if battle_id not in battle_rank_map:
-            continue
-        battle_teams[battle_id]["win"].add(int(win_brawler_id))
-        battle_teams[battle_id]["lose"].add(int(lose_brawler_id))
+    logger.info("参加者情報を読み込んでいます")
+    try:
+        battle_teams = _load_battle_teams_from_participants(
+            conn, rank_log_id_lower_bound
+        )
+    except ProgrammingError as exc:
+        if exc.errno == errorcode.ER_NO_SUCH_TABLE:
+            logger.warning(
+                "battle_participants テーブルが存在しないため win_lose_logs を利用します"
+            )
+            battle_teams = _load_battle_teams_from_win_lose(
+                conn, rank_log_id_lower_bound, battle_rank_map
+            )
+        else:
+            raise
 
     logger.info("スター獲得ログを読み込んでいます")
+    cursor = conn.cursor(buffered=False)
     cursor.execute(
         """
         SELECT rsl.rank_log_id, rsl.star_brawler_id
@@ -145,7 +204,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     star_logs: List[Tuple[str, int]] = []
-    for rank_log_id, star_brawler_id in cursor.fetchall():
+    for rank_log_id, star_brawler_id in cursor:
         rl_id_str = str(rank_log_id)
         if rl_id_str not in rank_logs:
             continue

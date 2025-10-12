@@ -47,10 +47,10 @@ def fetch_trio_rows(
     params: List[object] = [MIN_RANK_ID]
 
     if since is not None:
-        conditions.append("SUBSTRING(rl.id,1,8) >= %s")
+        conditions.append("rl.id >= %s")
         params.append(since)
     if until is not None:
-        conditions.append("SUBSTRING(rl.id,1,8) < %s")
+        conditions.append("rl.id < %s")
         params.append(until)
     if rank_id is not None:
         conditions.append("rl.rank_id = %s")
@@ -78,14 +78,16 @@ def fetch_trio_rows(
             WHERE rl.rank_id >= %s{condition_sql}
         ),
         win_brawlers AS (
-            SELECT DISTINCT wl.battle_log_id, wl.win_brawler_id AS brawler_id
-            FROM win_lose_logs wl
-            JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
+            SELECT bp.battle_log_id, bp.brawler_id
+            FROM battle_participants bp
+            JOIN recent_battles rb ON bp.battle_log_id = rb.battle_log_id
+            WHERE bp.team_side = 'win'
         ),
         lose_brawlers AS (
-            SELECT DISTINCT wl.battle_log_id, wl.lose_brawler_id AS brawler_id
-            FROM win_lose_logs wl
-            JOIN recent_battles rb ON wl.battle_log_id = rb.battle_log_id
+            SELECT bp.battle_log_id, bp.brawler_id
+            FROM battle_participants bp
+            JOIN recent_battles rb ON bp.battle_log_id = rb.battle_log_id
+            WHERE bp.team_side = 'lose'
         ),
         win_trios AS (
             SELECT rb.map_id,
