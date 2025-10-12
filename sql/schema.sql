@@ -70,12 +70,47 @@ CREATE TABLE IF NOT EXISTS win_lose_logs (
     FOREIGN KEY (battle_log_id) REFERENCES battle_logs(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
-CREATE INDEX idx_battle_logs_rank_log_id_id ON battle_logs(rank_log_id, id);
-CREATE INDEX idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
-CREATE INDEX idx_rank_logs_rank_id_id ON rank_logs(rank_id, id);
-CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs(star_brawler_id);
-CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
-CREATE INDEX idx_battle_participants_side ON battle_participants(team_side, brawler_id, battle_log_id);
-CREATE INDEX idx_battle_participants_battle ON battle_participants(battle_log_id, team_side);
+DROP PROCEDURE IF EXISTS ensure_index;
+
+DELIMITER $$
+
+CREATE PROCEDURE ensure_index(
+    IN in_table_name VARCHAR(64),
+    IN in_index_name VARCHAR(64),
+    IN in_columns VARCHAR(255)
+)
+BEGIN
+    DECLARE index_exists INT DEFAULT 0;
+
+    SELECT COUNT(1)
+        INTO index_exists
+        FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name = in_table_name
+          AND index_name = in_index_name;
+
+    IF index_exists = 0 THEN
+        SET @sql = CONCAT(
+            'CREATE INDEX ', in_index_name,
+            ' ON ', in_table_name,
+            '(', in_columns, ')'
+        );
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL ensure_index('battle_logs', 'idx_battle_logs_rank_log_id', 'rank_log_id');
+CALL ensure_index('battle_logs', 'idx_battle_logs_rank_log_id_id', 'rank_log_id, id');
+CALL ensure_index('rank_logs', 'idx_rank_logs_rank_map', 'rank_id, map_id');
+CALL ensure_index('rank_logs', 'idx_rank_logs_rank_id_id', 'rank_id, id');
+CALL ensure_index('rank_star_logs', 'idx_rank_star_logs_brawler', 'star_brawler_id');
+CALL ensure_index('win_lose_logs', 'idx_win_lose_logs_battle_log_id', 'battle_log_id');
+CALL ensure_index('battle_participants', 'idx_battle_participants_side', 'team_side, brawler_id, battle_log_id');
+CALL ensure_index('battle_participants', 'idx_battle_participants_battle', 'battle_log_id, team_side');
+
+DROP PROCEDURE ensure_index;
 
