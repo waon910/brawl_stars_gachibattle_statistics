@@ -83,29 +83,39 @@ def brawler_usage(
     season_id=None, rank_id=None, mode_id=None, map_id=None
 ) -> pd.DataFrame:
     """指定した階層でのキャラ使用率を集計する"""
-    query = (
-        "SELECT b.name_ja AS brawler, COUNT(*) AS count "
+    conditions = ["1=1"]
+    params: list = []
+    if season_id is not None:
+        start, next_start = season_range(season_id)
+        conditions.append("rl.id >= %s")
+        conditions.append("rl.id < %s")
+        params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
+    if rank_id is not None:
+        conditions.append("rl.rank_id=%s")
+        params.append(rank_id)
+    if mode_id is not None:
+        conditions.append("m.mode_id=%s")
+        params.append(mode_id)
+    if map_id is not None:
+        conditions.append("rl.map_id=%s")
+        params.append(map_id)
+
+    where_clause = " AND ".join(conditions)
+    inner_query = (
+        "SELECT DISTINCT rl.id AS rank_log_id, bp.brawler_id "
         "FROM battle_participants bp "
         "JOIN battle_logs bl ON bp.battle_log_id = bl.id "
         "JOIN rank_logs rl ON bl.rank_log_id = rl.id "
         "JOIN _maps m ON rl.map_id = m.id "
-        "JOIN _brawlers b ON bp.brawler_id = b.id WHERE 1=1"
+        f"WHERE {where_clause}"
     )
-    params: list = []
-    if season_id is not None:
-        start, next_start = season_range(season_id)
-        query += " AND rl.id >= %s AND rl.id < %s"
-        params.extend([start.strftime("%Y%m%d"), next_start.strftime("%Y%m%d")])
-    if rank_id is not None:
-        query += " AND rl.rank_id=%s"
-        params.append(rank_id)
-    if mode_id is not None:
-        query += " AND m.mode_id=%s"
-        params.append(mode_id)
-    if map_id is not None:
-        query += " AND rl.map_id=%s"
-        params.append(map_id)
-    query += " GROUP BY b.name_ja"
+    query = (
+        "SELECT b.name_ja AS brawler, COUNT(*) AS count "
+        f"FROM ({inner_query}) AS usage_per_rank "
+        "JOIN _brawlers b ON usage_per_rank.brawler_id = b.id "
+        "GROUP BY b.name_ja"
+    )
+
     with get_engine().connect() as conn:
         df = pd.read_sql_query(
             query,
