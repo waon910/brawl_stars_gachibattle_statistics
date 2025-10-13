@@ -60,3 +60,7 @@ env/
 
 .brawl_stars_pipeline.pid
 brawl_stats.db
+venv/
+*.db
+__pycache__/
+*.pyc
