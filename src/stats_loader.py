@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .settings import MIN_RANK_ID
-
-logger = logging.getLogger(__name__)
+from .logging_config import setup_logging
+setup_logging()
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
 
     cursor = conn.cursor()
 
-    logger.info("ランクログ情報を読み込んでいます")
+    logging.info("ランクログ情報を読み込んでいます")
     rank_logs: Dict[str, RankLogEntry] = {}
     # NOTE: rank_logs.id は日付8桁+連番の文字列であり、プレフィックス順に
     # 並ぶため、単純な文字列比較で対象期間以降を効率よく抽出できる。
@@ -97,7 +97,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
             date_key=rl_id_str[:8],
         )
 
-    logger.info("バトルログ情報を読み込んでいます")
+    logging.info("バトルログ情報を読み込んでいます")
     cursor.execute(
         """
         SELECT bl.id, bl.rank_log_id
@@ -111,7 +111,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     for battle_log_id, rank_log_id in cursor.fetchall():
         battle_rank_map[str(battle_log_id)] = str(rank_log_id)
 
-    logger.info("勝敗ログを読み込んでいます")
+    logging.info("勝敗ログを読み込んでいます")
     cursor.execute(
         """
         SELECT wl.battle_log_id, wl.win_brawler_id, wl.lose_brawler_id
@@ -134,7 +134,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         battle_teams[battle_id]["win"].add(int(win_brawler_id))
         battle_teams[battle_id]["lose"].add(int(lose_brawler_id))
 
-    logger.info("スター獲得ログを読み込んでいます")
+    logging.info("スター獲得ログを読み込んでいます")
     cursor.execute(
         """
         SELECT rsl.rank_log_id, rsl.star_brawler_id
@@ -187,6 +187,6 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     if participants:
         dataset._participants_cache = {k: set(v) for k, v in participants.items()}
 
-    logger.info("ランクログ: %d件, バトル: %d件を読み込みました", len(rank_logs), len(battles))
+    logging.info("ランクログ: %d件, バトル: %d件を読み込みました", len(rank_logs), len(battles))
     return dataset
 
