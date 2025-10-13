@@ -452,7 +452,7 @@ def main() -> None:
             new_rank_logs_total = 0
             new_battle_logs_total = 0
 
-            new_players_total += fetch_rank_player(api_key, conn)
+            # new_players_total += fetch_rank_player(api_key, conn)
             rest = 0
 
             try:
