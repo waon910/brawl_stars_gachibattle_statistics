@@ -61,16 +61,3 @@ python -m src.export_3v3_win_rates --output-dir three_vs_three_output
 
 出力ディレクトリ配下には `<map_id>.json` が生成され、各ファイルに勝利側・敗北側のキャラクターID(3体ずつ)、勝敗数、勝率、LCB が含まれます。
 
-## GUIダッシュボード
-
-`streamlit` を用いてデータベースの統計情報をリアルタイムに表示するダッシュボードを提供します。
-
-```bash
-# 依存パッケージのインストール
-pip install streamlit pandas streamlit-autorefresh
-
-# ダッシュボードの起動
-streamlit run src/dashboard.py
-```
-
-シーズン、モード、マップ、ランクを任意に選択して、キャラ使用率・勝率、対キャラ勝率、Beta-Binomial LCB に基づくおすすめトリオ編成トップNを確認できます。各項目で「全体」を選択すると全データを対象とした集計結果を表示します。シーズンは毎月第1木曜日を開始日として計算されます。
