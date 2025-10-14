@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>サイトについて | Brawl Stars 勝率データ集計</title>
+    <meta
+      name="description"
+      content="Brawl Stars ガチバトル統計サイトのデータソースや分析方針、プロランク到達プレイヤーの紹介を掲載しています。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../assets/styles/base.css" />
+    <link rel="stylesheet" href="../assets/styles/about.css" />
+    <script type="module" src="../assets/scripts/pro-players.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="container">
+        <p class="tagline">about this project</p>
+        <h1 class="hero-title">データに基づく戦略で、勝利をつかむ。</h1>
+        <p class="hero-lead">
+          本サイトでは Brawl Stars のガチバトル・パワーリーグの戦績を独自に収集し、統計的なアプローチで勝率・使用率を分析しています。
+          データの出どころや集計ポリシー、そしてプロランク到達の猛者たちをご紹介します。
+        </p>
+      </div>
+    </header>
+
+    <main>
+      <section id="overview" class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="tagline">mission</p>
+            <h2 class="section-title">サイトについて</h2>
+            <p class="section-description">
+              ガチバトルの膨大なログを可視化し、プレイヤーが「いつ」「どのマップで」「どの編成を選ぶべきか」を素早く判断できるよう支援することが私たちの目的です。
+              サイトの構成や集計方針を以下にまとめています。
+            </p>
+          </div>
+          <div class="overview-grid">
+            <article class="overview-card">
+              <h3>データソース</h3>
+              <p>
+                Supercell 公式 API から取得した戦績を、独自のバトルログ収集基盤で毎日更新しています。トロ帯ごと・マップごとに精緻な統計を生成し、過去30日間のトレンドを追跡しています。
+              </p>
+            </article>
+            <article class="overview-card">
+              <h3>集計ポリシー</h3>
+              <p>
+                ダイヤモンド帯以上の対戦を対象とし、勝率のばらつきを抑えるため Beta-Binomial
+                モデルによる信頼区間を採用。実戦に活かしやすい指標を重視しています。
+              </p>
+            </article>
+            <article class="overview-card">
+              <h3>更新サイクル</h3>
+              <p>
+                データは1時間おきに同期され、バトルログの品質を維持するため重複排除やプレイヤー情報のクレンジングを実施しています。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="rank-match-distribution" class="section">
+        <div class="container">
+          <div class="section-header">
+            <p class="tagline">insight</p>
+            <h2 class="section-title">ランク帯ごとの試合ログ分布</h2>
+            <p class="section-description">
+              各ランク帯で収集できたバトルログの分布を可視化し、データ量の偏りを随時監視しています。プロ帯に近づくほどログが希少になりやすいため、特に高ランク帯のデータ確保を強化しています。
+            </p>
+          </div>
+          <div class="match-distribution-body">
+            <div class="match-distribution-chart" role="img" aria-label="ランク帯ごとのログ分布チャート (サンプル)">
+              <p class="match-distribution-copy">
+                近日中にインタラクティブなチャートを公開予定です。現在はデータ収集と可視化の改善を進めています。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pro-players-section" class="section">
+        <div class="container pro-players">
+          <div class="section-header">
+            <p class="tagline">hall of fame</p>
+            <h2 class="section-title">プロランク到達プレイヤー</h2>
+            <p class="section-description">
+              data/map-meta/highest_rank_players.json に掲載されているプレイヤーを、自動的に読み込み表示しています。長い道のりを乗り越え、プロランクに到達したプレイヤーを称えましょう。
+            </p>
+          </div>
+
+          <div class="pro-players-toolbar glass-surface" aria-label="プロプレイヤー一覧の操作パネル">
+            <div class="toolbar-group">
+              <label for="player-search">プレイヤー検索</label>
+              <input
+                id="player-search"
+                type="search"
+                placeholder="プレイヤー名で絞り込み"
+                aria-describedby="player-count"
+                autocomplete="off"
+              />
+            </div>
+            <div class="toolbar-group">
+              <label for="player-sort">並び替え</label>
+              <select id="player-sort">
+                <option value="asc">名前 (昇順)</option>
+                <option value="desc">名前 (降順)</option>
+              </select>
+            </div>
+            <div class="view-toggle" role="group" aria-label="表示モードの切り替え">
+              <button type="button" data-view="card" data-active="true" aria-pressed="true">カード</button>
+              <button type="button" data-view="compact" aria-pressed="false">リスト</button>
+            </div>
+            <div class="pro-player-status" id="player-count" aria-live="polite"></div>
+          </div>
+
+          <div class="pro-player-loading" id="player-loading" aria-hidden="false">
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+            <div class="pro-player-skeleton" aria-hidden="true"></div>
+          </div>
+
+          <div class="pro-player-error" id="player-error" hidden>
+            <strong>データを読み込めませんでした。</strong>
+            <p>
+              接続状況をご確認のうえ、再読込をお試しください。問題が続く場合はお問い合わせフォームからご連絡ください。
+            </p>
+            <button type="button" id="player-retry">再読込</button>
+          </div>
+
+          <div class="pro-player-empty" id="player-empty" hidden>
+            <strong>該当するプレイヤーが見つかりません。</strong>
+            <p>検索条件を調整するか、別のキーワードをお試しください。</p>
+          </div>
+
+          <div class="pro-player-grid" id="player-grid" hidden aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
