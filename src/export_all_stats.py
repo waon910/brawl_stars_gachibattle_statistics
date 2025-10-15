@@ -4,10 +4,17 @@ import argparse
 import json
 import logging
 import shutil
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Dict
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows環境等では取得できない
+    resource = None  # type: ignore[assignment]
 
 import mysql.connector
 
@@ -36,6 +43,36 @@ setup_logging()
 JST = timezone(timedelta(hours=9))
 
 
+def _get_memory_usage_bytes() -> int:
+    """現在のプロセスの常駐メモリ使用量（バイト）を取得する."""
+
+    if resource is None:
+        return -1
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return int(usage)
+    return int(usage) * 1024
+
+
+def _format_memory_usage() -> str:
+    """メモリ使用量を可読形式の文字列に整形する."""
+
+    bytes_used = _get_memory_usage_bytes()
+    if bytes_used < 0:
+        return "N/A"
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if bytes_used < 1024 or unit == "TB":
+            return f"{bytes_used:.2f}{unit}"
+        bytes_used /= 1024
+    return f"{bytes_used:.2f}TB"
+
+
+def _log_memory_usage(context: str) -> None:
+    """現在のメモリ使用量をINFOログに出力する."""
+
+    logging.info("[%s] 現在の最大常駐メモリ: %s", context, _format_memory_usage())
+
+
 def _write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fp:
@@ -57,6 +94,12 @@ def _export_star_rates(dataset, output_path: Path) -> None:
 def _export_pair_stats(dataset, output_dir: Path) -> None:
     matchup_rows = fetch_pair_matchup_stats(dataset)
     synergy_rows = fetch_pair_synergy_stats(dataset)
+    logging.info(
+        "ペア統計の入力件数: matchup=%d, synergy=%d",
+        len(matchup_rows),
+        len(synergy_rows),
+    )
+    _log_memory_usage("pair_stats 集計前")
     matchup_result = compute_pair_rates(
         matchup_rows, symmetrical=False, confidence=CONFIDENCE_LEVEL
     )
@@ -191,6 +234,16 @@ def main() -> None:
     trio_dir = output_root / args.trio_dir_name
     three_vs_three_dir = output_root / args.three_vs_three_dir_name
 
+    logging.info(
+        "共通データセット読み込み完了: rank_logs=%d, battles=%d, star_logs=%d",
+        len(dataset.rank_logs),
+        len(dataset.battles),
+        len(dataset.star_logs),
+    )
+    _log_memory_usage("共通データセット読み込み直後")
+    logging.info("ランクマッチ数レコード件数: %d", len(rank_match_counts))
+    logging.info("最高ランク達成プレイヤー件数: %d", len(highest_rank_players))
+
     tasks: Dict[str, Callable[[], None]] = {
         "win_rates": lambda: _export_win_rates(dataset, win_rate_path),
         "star_rates": lambda: _export_star_rates(dataset, star_rate_path),
@@ -201,9 +254,29 @@ def main() -> None:
         ),
     }
 
+    def _wrap_task(name: str, func: Callable[[], None]) -> Callable[[], None]:
+        def _runner() -> None:
+            logging.info("%s: 出力処理を開始します", name)
+            _log_memory_usage(f"{name} 開始時")
+            start_time = time.perf_counter()
+            try:
+                func()
+            finally:
+                elapsed = time.perf_counter() - start_time
+                logging.info("%s: 出力処理が完了しました (経過時間: %.2f秒)", name, elapsed)
+                _log_memory_usage(f"{name} 完了時")
+
+        return _runner
+
+    wrapped_tasks: Dict[str, Callable[[], None]] = {
+        name: _wrap_task(name, task) for name, task in tasks.items()
+    }
+
     logging.info("統計出力を実行しています")
-    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-        future_to_name = {executor.submit(func): name for name, func in tasks.items()}
+    with ThreadPoolExecutor(max_workers=len(wrapped_tasks)) as executor:
+        future_to_name = {
+            executor.submit(func): name for name, func in wrapped_tasks.items()
+        }
         for future in as_completed(future_to_name):
             name = future_to_name[future]
             try:
