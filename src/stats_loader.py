@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from .settings import MIN_RANK_ID
 from .logging_config import setup_logging
+from .memory_utils import log_memory_usage
+from .settings import MIN_RANK_ID
 setup_logging()
 
 
@@ -92,6 +93,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         (MIN_RANK_ID, rank_log_id_lower_bound),
     )
     rank_log_rows = cursor.fetchall()
+    log_memory_usage("rank_logs 取得直後")
     logging.info(
         "ランクログ取得完了: %d件 (%.2f秒)",
         len(rank_log_rows),
@@ -111,6 +113,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         "ランクログ加工完了 (%.2f秒)",
         perf_counter() - process_start,
     )
+    log_memory_usage("rank_logs 加工後")
 
     logging.info("バトルログ情報を読み込んでいます")
     query_start = perf_counter()
@@ -125,6 +128,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     )
     battle_rank_map: Dict[str, str] = {}
     battle_rows = cursor.fetchall()
+    log_memory_usage("battle_logs 取得直後")
     logging.info(
         "バトルログ取得完了: %d件 (%.2f秒)",
         len(battle_rows),
@@ -137,6 +141,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         "バトルログ加工完了 (%.2f秒)",
         perf_counter() - process_start,
     )
+    log_memory_usage("battle_logs 加工後")
 
     logging.info("勝敗ログを読み込んでいます")
     query_start = perf_counter()
@@ -156,6 +161,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
 
     battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(_team_factory)
     win_lose_rows = cursor.fetchall()
+    log_memory_usage("win_lose_logs 取得直後")
     logging.info(
         "勝敗ログ取得完了: %d件 (%.2f秒)",
         len(win_lose_rows),
@@ -173,6 +179,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         len(battle_teams),
         perf_counter() - process_start,
     )
+    log_memory_usage("win_lose_logs 加工後")
 
     logging.info("スター獲得ログを読み込んでいます")
     query_start = perf_counter()
@@ -187,6 +194,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     )
     star_logs: List[Tuple[str, int]] = []
     star_rows = cursor.fetchall()
+    log_memory_usage("star_logs 取得直後")
     logging.info(
         "スター獲得ログ取得完了: %d件 (%.2f秒)",
         len(star_rows),
@@ -202,6 +210,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         "スター獲得ログ加工完了 (%.2f秒)",
         perf_counter() - process_start,
     )
+    log_memory_usage("star_logs 加工後")
 
     cursor.close()
 
@@ -242,6 +251,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         len(battles),
         perf_counter() - build_start,
     )
+    log_memory_usage("RankedBattle 生成後")
     if participants:
         dataset._participants_cache = {k: set(v) for k, v in participants.items()}
 
