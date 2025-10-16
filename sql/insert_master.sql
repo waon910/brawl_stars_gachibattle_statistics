@@ -121,6 +121,8 @@ REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000118, 'Pinball Dreams
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000132, 'Center Stage', '中央コード', 7);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000024, 'Backyard Bowl', '鉄壁の護り', 7);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000026, 'Pinhole Punt', '狭き門', 7);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15001020, 'Grass Knot', 'クサムスビ平原', 7);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15001021, 'Spiraling Out', 'スパイラルピッチ', 7);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000368, 'Belles Rock', 'ベルの岩', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000440, 'Flaring Phoenix', '燃える不死鳥', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000548, 'Out In The Open', 'オープンフィールド', 17);

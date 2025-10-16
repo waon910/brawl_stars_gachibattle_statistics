@@ -32,4 +32,7 @@ MAP_NAME_TO_ID: dict[str, int] = {
     "Goldarm Gulch": 15000367,
     "Excel": 15000081,
     "Infinite Doom": 15000617,
+    "Grass Knot": 15001020,
+    "Spiraling Out": 15001021,
+
 }
