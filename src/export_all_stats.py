@@ -18,7 +18,6 @@ from .export_3v3_win_rates import (
     export_matchup_json,
     fetch_matchup_rows as fetch_three_vs_three_rows,
 )
-from .export_highest_rank_players import fetch_highest_rank_players
 from .export_pair_stats import (
     compute_pair_rates,
     fetch_matchup_stats as fetch_pair_matchup_stats,
@@ -130,17 +129,6 @@ def main() -> None:
         help="ランクマッチ数統計のファイル名",
     )
     parser.add_argument(
-        "--highest-rank-player-filename",
-        default="highest_rank_players.json",
-        help="最高ランク達成プレイヤー一覧のファイル名",
-    )
-    parser.add_argument(
-        "--highest-rank-target",
-        type=int,
-        default=22,
-        help="最高ランク達成プレイヤーとして抽出するランク",
-    )
-    parser.add_argument(
         "--pair-dir-name",
         default="pair_stats",
         help="ペア統計のディレクトリ名",
@@ -183,9 +171,6 @@ def main() -> None:
         dataset = load_recent_ranked_battles(conn, since)
         logging.info("ランクマッチ数を取得しています...")
         rank_match_counts = fetch_rank_match_counts(conn)
-        highest_rank_players = fetch_highest_rank_players(
-            conn, rank=args.highest_rank_target
-        )
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
@@ -194,7 +179,6 @@ def main() -> None:
     win_rate_path = output_root / args.win_rate_filename
     star_rate_path = output_root / args.star_rate_filename
     rank_match_path = output_root / args.rank_match_count_filename
-    highest_rank_player_path = output_root / args.highest_rank_player_filename
     pair_dir = output_root / args.pair_dir_name
     trio_dir = output_root / args.trio_dir_name
     three_vs_three_dir = output_root / args.three_vs_three_dir_name
@@ -207,7 +191,6 @@ def main() -> None:
     )
     log_memory_usage("共通データセット読み込み直後")
     logging.info("ランクマッチ数レコード件数: %d", len(rank_match_counts))
-    logging.info("最高ランク達成プレイヤー件数: %d", len(highest_rank_players))
 
     tasks: Dict[str, Callable[[], None]] = {
         "win_rates": lambda: _export_win_rates(dataset, win_rate_path),
@@ -253,12 +236,6 @@ def main() -> None:
 
     logging.info("ランクマッチ数を出力しています: %s", rank_match_path)
     _write_json(rank_match_path, rank_match_counts)
-    logging.info(
-        "最高ランク %d のプレイヤー名を出力しています: %s",
-        args.highest_rank_target,
-        highest_rank_player_path,
-    )
-    _write_json(highest_rank_player_path, highest_rank_players)
     logging.info("すべての統計出力が完了しました")
 
 
