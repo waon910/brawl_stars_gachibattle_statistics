@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
-from .logging_config import setup_logging
 from .memory_utils import log_memory_usage
 from .settings import MIN_RANK_ID
-setup_logging()
+
+logger = logging.getLogger(__name__)
 
 
 FETCH_BATCH_SIZE = 100_000
@@ -88,7 +88,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
 
     total_start = perf_counter()
 
-    logging.info("ランクログ情報を読み込んでいます")
+    logger.info("ランクログ情報を読み込んでいます")
     rank_logs: Dict[str, RankLogEntry] = {}
     # NOTE: rank_logs.id は日付8桁+連番の文字列であり、プレフィックス順に
     # 並ぶため、単純な文字列比較で対象期間以降を効率よく抽出できる。
@@ -118,14 +118,14 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
                 date_key=rl_id_str[:8],
             )
         processed_rank_logs += len(rows)
-    logging.info(
+    logger.info(
         "ランクログ取得・加工完了: %d件 (%.2f秒)",
         processed_rank_logs,
         perf_counter() - query_start,
     )
     log_memory_usage("rank_logs 加工後")
 
-    logging.info("バトルログ情報を読み込んでいます")
+    logger.info("バトルログ情報を読み込んでいます")
     query_start = perf_counter()
     cursor.execute(
         """
@@ -143,14 +143,14 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         for battle_log_id, rank_log_id in rows:
             battle_rank_map[str(battle_log_id)] = str(rank_log_id)
         processed_battles += len(rows)
-    logging.info(
+    logger.info(
         "バトルログ取得・加工完了: %d件 (%.2f秒)",
         processed_battles,
         perf_counter() - query_start,
     )
     log_memory_usage("battle_logs 加工後")
 
-    logging.info("勝敗ログを読み込んでいます")
+    logger.info("勝敗ログを読み込んでいます")
     query_start = perf_counter()
     cursor.execute(
         """
@@ -177,14 +177,14 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
             battle_teams[battle_id]["win"].add(int(win_brawler_id))
             battle_teams[battle_id]["lose"].add(int(lose_brawler_id))
         processed_win_lose_rows += len(rows)
-    logging.info(
+    logger.info(
         "勝敗ログ取得・加工完了: %d件 (%.2f秒)",
         processed_win_lose_rows,
         perf_counter() - query_start,
     )
     log_memory_usage("win_lose_logs 加工後")
 
-    logging.info("スター獲得ログを読み込んでいます")
+    logger.info("スター獲得ログを読み込んでいます")
     query_start = perf_counter()
     cursor.execute(
         """
@@ -205,7 +205,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
                 continue
             star_logs.append((rl_id_str, int(star_brawler_id)))
         processed_star_logs += len(rows)
-    logging.info(
+    logger.info(
         "スター獲得ログ取得・加工完了: %d件 (%.2f秒)",
         processed_star_logs,
         perf_counter() - query_start,
@@ -246,7 +246,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         )
 
     dataset = StatsDataset(rank_logs=rank_logs, battles=battles, star_logs=star_logs)
-    logging.info(
+    logger.info(
         "RankedBattle生成完了: %d件 (%.2f秒)",
         len(battles),
         perf_counter() - build_start,
@@ -255,7 +255,7 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     if participants:
         dataset._participants_cache = {k: set(v) for k, v in participants.items()}
 
-    logging.info(
+    logger.info(
         "ランクログ: %d件, バトル: %d件を読み込みました (総処理時間: %.2f秒)",
         len(rank_logs),
         len(battles),

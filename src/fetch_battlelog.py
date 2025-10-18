@@ -57,7 +57,6 @@ OPPOSITE = {"victory": "defeat", "defeat": "victory"}
 
 JST = timezone(timedelta(hours=9))
 
-setup_logging()
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -430,10 +429,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    setup_logging()
+
     load_environment()
 
     api_key = os.getenv("BRAWL_STARS_API_KEY")

@@ -19,7 +19,7 @@ from .logging_config import setup_logging
 from .stats_loader import StatsDataset, load_recent_ranked_battles
 from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 
-setup_logging()
+logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
 
 MatchupRow = Tuple[int, int, int, int, int, int, int, float]
@@ -142,6 +142,8 @@ def export_matchup_json(results: Dict[int, List[Dict[str, object]]], output_dir:
 
 
 def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="3対3編成勝率をJSONとして出力")
     parser.add_argument(
         "--output-dir",
@@ -156,28 +158,26 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
     since = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
+    logger.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
 
-    logging.info("データベースに接続しています")
+    logger.info("データベースに接続しています")
     try:
         conn = get_connection()
     except mysql.connector.Error as exc:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        logging.info("3対3編成データを取得しています...")
+        logger.info("3対3編成データを取得しています...")
         dataset = load_recent_ranked_battles(conn, since)
         rows = fetch_matchup_rows(dataset)
-        logging.info("%d 行の3対3データを取得", len(rows))
+        logger.info("%d 行の3対3データを取得", len(rows))
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
         conn.close()
 
-    logging.info("勝率指標を計算しています")
+    logger.info("勝率指標を計算しています")
     results = compute_matchup_scores(
         rows,
         min_games=args.min_games,
@@ -185,10 +185,10 @@ def main() -> None:
     )
 
     output_dir = Path(args.output_dir)
-    logging.info("JSONを出力しています: %s", output_dir)
+    logger.info("JSONを出力しています: %s", output_dir)
     export_matchup_json(results, output_dir)
 
-    logging.info("3対3編成統計の出力が完了しました")
+    logger.info("3対3編成統計の出力が完了しました")
 
 
 if __name__ == "__main__":
