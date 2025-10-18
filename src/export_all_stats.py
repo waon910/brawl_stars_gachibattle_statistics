@@ -33,7 +33,7 @@ from .memory_utils import log_memory_usage
 from .stats_loader import load_recent_ranked_battles
 from .trio_stats import compute_trio_scores, fetch_trio_rows
 
-setup_logging()
+logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
 
 
@@ -58,7 +58,7 @@ def _export_star_rates(dataset, output_path: Path) -> None:
 def _export_pair_stats(dataset, output_dir: Path) -> None:
     matchup_rows = fetch_pair_matchup_stats(dataset)
     synergy_rows = fetch_pair_synergy_stats(dataset)
-    logging.info(
+    logger.info(
         "ペア統計の入力件数: matchup=%d, synergy=%d",
         len(matchup_rows),
         len(synergy_rows),
@@ -107,6 +107,8 @@ def _export_three_vs_three_stats(
 
 
 def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="統計出力をまとめて実行")
     parser.add_argument(
         "--output-root",
@@ -151,25 +153,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
     jst_now = datetime.now(JST)
     since = (jst_now - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
+    logger.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
 
-    logging.info("データベースに接続しています")
+    logger.info("データベースに接続しています")
     try:
         conn = get_connection()
     except mysql.connector.Error as exc:  # pragma: no cover - DB接続エラー
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        logging.info("共通データセットを読み込んでいます...")
+        logger.info("共通データセットを読み込んでいます...")
         dataset = load_recent_ranked_battles(conn, since)
-        logging.info("ランクマッチ数を取得しています...")
+        logger.info("ランクマッチ数を取得しています...")
         rank_match_counts = fetch_rank_match_counts(conn)
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
@@ -183,14 +183,14 @@ def main() -> None:
     trio_dir = output_root / args.trio_dir_name
     three_vs_three_dir = output_root / args.three_vs_three_dir_name
 
-    logging.info(
+    logger.info(
         "共通データセット読み込み完了: rank_logs=%d, battles=%d, star_logs=%d",
         len(dataset.rank_logs),
         len(dataset.battles),
         len(dataset.star_logs),
     )
     log_memory_usage("共通データセット読み込み直後")
-    logging.info("ランクマッチ数レコード件数: %d", len(rank_match_counts))
+    logger.info("ランクマッチ数レコード件数: %d", len(rank_match_counts))
 
     tasks: Dict[str, Callable[[], None]] = {
         "win_rates": lambda: _export_win_rates(dataset, win_rate_path),
@@ -204,14 +204,14 @@ def main() -> None:
 
     def _wrap_task(name: str, func: Callable[[], None]) -> Callable[[], None]:
         def _runner() -> None:
-            logging.info("%s: 出力処理を開始します", name)
+            logger.info("%s: 出力処理を開始します", name)
             log_memory_usage(f"{name} 開始時")
             start_time = time.perf_counter()
             try:
                 func()
             finally:
                 elapsed = time.perf_counter() - start_time
-                logging.info("%s: 出力処理が完了しました (経過時間: %.2f秒)", name, elapsed)
+                logger.info("%s: 出力処理が完了しました (経過時間: %.2f秒)", name, elapsed)
                 log_memory_usage(f"{name} 完了時")
 
         return _runner
@@ -220,7 +220,7 @@ def main() -> None:
         name: _wrap_task(name, task) for name, task in tasks.items()
     }
 
-    logging.info("統計出力を実行しています")
+    logger.info("統計出力を実行しています")
     with ThreadPoolExecutor(max_workers=len(wrapped_tasks)) as executor:
         future_to_name = {
             executor.submit(func): name for name, func in wrapped_tasks.items()
@@ -229,14 +229,14 @@ def main() -> None:
             name = future_to_name[future]
             try:
                 future.result()
-                logging.info("%s の出力が完了しました", name)
+                logger.info("%s の出力が完了しました", name)
             except Exception:  # pragma: no cover - 実行時エラーはそのまま伝搬
-                logging.exception("%s の出力中にエラーが発生しました", name)
+                logger.exception("%s の出力中にエラーが発生しました", name)
                 raise
 
-    logging.info("ランクマッチ数を出力しています: %s", rank_match_path)
+    logger.info("ランクマッチ数を出力しています: %s", rank_match_path)
     _write_json(rank_match_path, rank_match_counts)
-    logging.info("すべての統計出力が完了しました")
+    logger.info("すべての統計出力が完了しました")
 
 
 if __name__ == "__main__":

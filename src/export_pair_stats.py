@@ -15,7 +15,8 @@ from .db import get_connection
 from .logging_config import setup_logging
 from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 from .stats_loader import StatsDataset, load_recent_ranked_battles
-setup_logging()
+
+logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
 
 
@@ -113,6 +114,8 @@ def compute_pair_rates(
 
 
 def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="対キャラ・協力勝率をJSONとして出力")
     parser.add_argument(
         "--output-dir",
@@ -121,24 +124,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     since = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
+    logger.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
 
-    logging.info("データベースに接続しています")
+    logger.info("データベースに接続しています")
     try:
         conn = get_connection()
     except mysql.connector.Error as e:
         raise SystemExit(f"データベースに接続できません: {e}")
 
     try:
-        logging.info("対キャラデータを取得しています...")
+        logger.info("対キャラデータを取得しています...")
         dataset = load_recent_ranked_battles(conn, since)
         matchup_rows = fetch_matchup_stats(dataset)
-        logging.info("%d 行の対キャラデータを取得", len(matchup_rows))
-        logging.info("協力データを取得しています...")
+        logger.info("%d 行の対キャラデータを取得", len(matchup_rows))
+        logger.info("協力データを取得しています...")
         synergy_rows = fetch_synergy_stats(dataset)
-        logging.info("%d 行の協力データを取得", len(synergy_rows))
+        logger.info("%d 行の協力データを取得", len(synergy_rows))
     except mysql.connector.Error as e:
         raise SystemExit(f"クエリの実行に失敗しました: {e}")
     finally:
@@ -149,7 +151,7 @@ def main() -> None:
     result = {"matchup": matchup_result, "synergy": synergy_result}
 
     base_dir = Path(args.output_dir)
-    logging.info("ディレクトリに分割して書き込んでいます: %s", base_dir)
+    logger.info("ディレクトリに分割して書き込んでいます: %s", base_dir)
     for kind, maps in result.items():
         kind_dir = base_dir / kind
         kind_dir.mkdir(parents=True, exist_ok=True)
@@ -157,7 +159,7 @@ def main() -> None:
             out_file = kind_dir / f"{map_id}.json"
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-    logging.info("JSON出力が完了しました")
+    logger.info("JSON出力が完了しました")
 
 
 if __name__ == "__main__":

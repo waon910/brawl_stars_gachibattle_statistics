@@ -14,7 +14,7 @@ from .logging_config import setup_logging
 from .settings import DATA_RETENTION_DAYS
 from .stats_loader import StatsDataset, load_recent_ranked_battles
 
-setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def fetch_star_rows(dataset: StatsDataset) -> List[Tuple[int, int, int, int, int]]:
@@ -74,15 +74,15 @@ def compute_star_rates(
 
 
 def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="スター取得率統計データをJSONとして出力")
     parser.add_argument("--output", default="star_rates.json", help="出力先JSONファイル")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
     jst_now = datetime.now(timezone(timedelta(hours=9)))
     since = (jst_now - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    logging.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
+    logger.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
 
     try:
         conn = get_connection()
@@ -90,10 +90,10 @@ def main() -> None:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        logging.info("スター取得データを取得しています...")
+        logger.info("スター取得データを取得しています...")
         dataset = load_recent_ranked_battles(conn, since)
         rows = fetch_star_rows(dataset)
-        logging.info("%d 行のデータを取得しました", len(rows))
+        logger.info("%d 行のデータを取得しました", len(rows))
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
@@ -101,10 +101,10 @@ def main() -> None:
 
     stats = compute_star_rates(rows)
 
-    logging.info("JSONファイルに書き込んでいます: %s", args.output)
+    logger.info("JSONファイルに書き込んでいます: %s", args.output)
     with open(args.output, "w", encoding="utf-8") as fp:
         json.dump(stats, fp, ensure_ascii=False, indent=2)
-    logging.info("JSON出力が完了しました")
+    logger.info("JSON出力が完了しました")
 
 
 if __name__ == "__main__":

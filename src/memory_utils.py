@@ -11,6 +11,8 @@ try:
 except ImportError:  # pragma: no cover - Windows等では利用不可
     resource = None  # type: ignore[assignment]
 
+logger = logging.getLogger(__name__)
+
 __all__: Final = ("get_memory_usage_bytes", "format_memory_usage", "log_memory_usage")
 
 
@@ -44,4 +46,4 @@ def format_memory_usage() -> str:
 def log_memory_usage(context: str) -> None:
     """現在のメモリ使用量をINFOログに出力する."""
 
-    logging.info("[%s] 現在の最大常駐メモリ: %s", context, format_memory_usage())
+    logger.info("[%s] 現在の最大常駐メモリ: %s", context, format_memory_usage())

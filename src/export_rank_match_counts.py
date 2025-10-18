@@ -21,7 +21,7 @@ class RankMatchCount(TypedDict):
     rank_log_count: int
 
 
-setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def fetch_rank_match_counts(conn) -> List[RankMatchCount]:
@@ -56,6 +56,8 @@ def fetch_rank_match_counts(conn) -> List[RankMatchCount]:
 
 
 def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description="設定ランク以上のランクマッチ数をJSONとして出力"
     )
@@ -66,27 +68,25 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-    logging.info("データベースに接続しています")
+    logger.info("データベースに接続しています")
     try:
         conn = get_connection()
     except mysql.connector.Error as exc:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        logging.info("ランクマッチ数を取得しています...")
+        logger.info("ランクマッチ数を取得しています...")
         results = fetch_rank_match_counts(conn)
-        logging.info("%d 件のランク情報を取得しました", len(results))
+        logger.info("%d 件のランク情報を取得しました", len(results))
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
         conn.close()
 
-    logging.info("JSONファイルに書き込んでいます: %s", args.output)
+    logger.info("JSONファイルに書き込んでいます: %s", args.output)
     with open(args.output, "w", encoding="utf-8") as fp:
         json.dump(results, fp, ensure_ascii=False, indent=2)
-    logging.info("JSON出力が完了しました")
+    logger.info("JSON出力が完了しました")
 
 
 if __name__ == "__main__":
