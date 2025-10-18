@@ -24,6 +24,8 @@ JST = timezone(timedelta(hours=9))
 
 MatchupRow = Tuple[int, int, int, int, int, int, int, float]
 
+MIN_BETA_PARAMETER = 1e-6
+
 
 def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界を計算する."""
@@ -101,14 +103,14 @@ def compute_matchup_scores(
 
         mean = total_wins / total_games
         strength = total_games / len(orientation_stats)
-        alpha_prior = mean * strength
-        beta_prior = (1 - mean) * strength
+        alpha_prior = max(mean * strength, MIN_BETA_PARAMETER)
+        beta_prior = max((1 - mean) * strength, MIN_BETA_PARAMETER)
 
         records: List[Tuple[Dict[str, object], float]] = []
         for win_team, lose_team, wins_val, games in orientation_stats:
             losses_val = games - wins_val
-            alpha_post = alpha_prior + wins_val
-            beta_post = beta_prior + losses_val
+            alpha_post = max(alpha_prior + wins_val, MIN_BETA_PARAMETER)
+            beta_post = max(beta_prior + losses_val, MIN_BETA_PARAMETER)
             lcb = beta_lcb(alpha_post, beta_post, confidence)
             record = {
                 "win_brawlers": list(win_team),
