@@ -23,6 +23,8 @@ LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
 # 設定ファイルが読み込めなかった場合のフォールバック値
 DEFAULT_RETENTION_DAYS=30
 RETENTION_DAYS="$DEFAULT_RETENTION_DAYS"
+DEFAULT_MAX_EXPORT_WORKERS=1
+MAX_EXPORT_WORKERS="$DEFAULT_MAX_EXPORT_WORKERS"
 START_TIME=0
 
 # ログ設定
@@ -41,6 +43,7 @@ load_env_files() {
         source "$LOCAL_ENV_FILE"
     fi
     RETENTION_DAYS="${DATA_RETENTION_DAYS:-$DEFAULT_RETENTION_DAYS}"
+    MAX_EXPORT_WORKERS="${EXPORT_MAX_WORKERS:-$DEFAULT_MAX_EXPORT_WORKERS}"
 }
 
 setup() {
@@ -226,7 +229,8 @@ main() {
         --rank-match-count-filename "$RANK_MATCH_COUNT_FILE_NAME" \
         --pair-dir-name "$PAIR_STATS_DIR_NAME" \
         --trio-dir-name "$TRIO_STATS_DIR_NAME" \
-        --three-vs-three-dir-name "$THREE_VS_THREE_STATS_DIR_NAME"; then
+        --three-vs-three-dir-name "$THREE_VS_THREE_STATS_DIR_NAME" \
+        --max-workers "$MAX_EXPORT_WORKERS"; then
         log_error "統計データのエクスポートに失敗しました"
         exit 1
     fi
