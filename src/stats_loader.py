@@ -27,7 +27,7 @@ def _iter_cursor(cursor, batch_size: int) -> Iterator[Sequence[Tuple[Any, ...]]]
         yield rows
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RankLogEntry:
     """ランクログ1件分のメタデータ."""
 
@@ -38,7 +38,7 @@ class RankLogEntry:
     date_key: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RankedBattle:
     """1試合分の勝敗情報."""
 
@@ -51,7 +51,7 @@ class RankedBattle:
     lose_brawlers: Tuple[int, ...]
 
 
-@dataclass
+@dataclass(slots=True)
 class StatsDataset:
     """統計エクスポートで使い回すデータセット."""
 
