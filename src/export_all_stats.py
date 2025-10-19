@@ -151,6 +151,12 @@ def main() -> None:
         default=4,
         help="3対3統計で採用する最低試合数",
     )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=1,
+        help="統計出力を並列実行する際の最大ワーカー数 (デフォルト: 1)",
+    )
     args = parser.parse_args()
 
     output_root = Path(args.output_root)
@@ -220,19 +226,26 @@ def main() -> None:
         name: _wrap_task(name, task) for name, task in tasks.items()
     }
 
-    logger.info("統計出力を実行しています")
-    with ThreadPoolExecutor(max_workers=len(wrapped_tasks)) as executor:
-        future_to_name = {
-            executor.submit(func): name for name, func in wrapped_tasks.items()
-        }
-        for future in as_completed(future_to_name):
-            name = future_to_name[future]
-            try:
-                future.result()
-                logger.info("%s の出力が完了しました", name)
-            except Exception:  # pragma: no cover - 実行時エラーはそのまま伝搬
-                logger.exception("%s の出力中にエラーが発生しました", name)
-                raise
+    max_workers = max(1, min(len(wrapped_tasks), args.max_workers))
+    if max_workers == 1:
+        logger.info("統計出力を順次実行しています")
+        for name, func in wrapped_tasks.items():
+            func()
+            logger.info("%s の出力が完了しました", name)
+    else:
+        logger.info("統計出力を最大 %d 並列で実行しています", max_workers)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_name = {
+                executor.submit(func): name for name, func in wrapped_tasks.items()
+            }
+            for future in as_completed(future_to_name):
+                name = future_to_name[future]
+                try:
+                    future.result()
+                    logger.info("%s の出力が完了しました", name)
+                except Exception:  # pragma: no cover - 実行時エラーはそのまま伝搬
+                    logger.exception("%s の出力中にエラーが発生しました", name)
+                    raise
 
     logger.info("ランクマッチ数を出力しています: %s", rank_match_path)
     _write_json(rank_match_path, rank_match_counts)
