@@ -72,8 +72,14 @@ def request_with_retry(
     timeout: Optional[Sequence[float] | float] = None,
     max_retries: int = MAX_RETRIES,
     request_interval: float = REQUEST_INTERVAL,
-) -> Optional[requests.Response]:
-    """API にリクエストを送り、失敗した場合はリトライを行う汎用関数"""
+) -> Tuple[Optional[requests.Response], Optional[int]]:
+    """API にリクエストを送り、失敗した場合はリトライを行う汎用関数
+
+    Returns:
+        Tuple[Optional[requests.Response], Optional[int]]: レスポンスと、エラー発生時の
+            HTTP ステータスコード。成功した場合は (response, None)、404 の場合は
+            (None, 404)、その他のエラーの場合は (None, status_code) を返す。
+    """
 
     if timeout is None:
         timeout_values: Tuple[float, float] = REQUEST_TIMEOUT
@@ -96,9 +102,9 @@ def request_with_retry(
             )
             if resp.status_code == 404:
                 logger.warning("Resource not found: %s", url)
-                return None
+                return None, 404
             resp.raise_for_status()
-            return resp
+            return resp, None
         except requests.Timeout as e:
             logger.warning(
                 "Timeout while requesting %s (attempt %d/%d): %s",
@@ -108,9 +114,13 @@ def request_with_retry(
                 e,
             )
         except requests.RequestException as e:
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code == 404:
+                logger.warning("Resource not found: %s", url)
+                return None, 404
             if attempt == max_retries:
                 logger.error("Request failed: %s", e)
-                return None
+                return None, status_code
             wait = 3 * attempt
             logger.warning(
                 "Request failed (%d/%d): %s. Retrying in %d seconds.",
@@ -122,6 +132,8 @@ def request_with_retry(
             time.sleep(wait)
         except KeyboardInterrupt:
             raise
+
+    return None, None
 
 
 def cleanup_old_logs(conn) -> int:
@@ -160,9 +172,16 @@ def fetch_rank_player(api_key: str, conn) -> int:
             "Accept": "application/json",
         }
 
-        resp = request_with_retry(url, headers=headers)
+        resp, status_code = request_with_retry(url, headers=headers)
         if resp is None:
-            logger.error("国コード:%s エラー:ランキングを取得できませんでした。", code)
+            if status_code == 404:
+                logger.error("国コード:%s エラー:ランキングを取得できませんでした。(404)", code)
+            else:
+                logger.error(
+                    "国コード:%s エラー:ランキングを取得できませんでした。 status=%s",
+                    code,
+                    status_code,
+                )
             continue
 
         try:
@@ -210,13 +229,20 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             "Accept": "application/json",
         }
 
-        resp = request_with_retry(url, headers=headers)
+        resp, status_code = request_with_retry(url, headers=headers)
         if resp is None:
-            cur.execute(
-                "DELETE FROM players WHERE tag=%s",
-                (player_tag,),
-            )
-            logger.warning("プレイヤーが見つかりません: %s", player_tag)
+            if status_code == 404:
+                cur.execute(
+                    "DELETE FROM players WHERE tag=%s",
+                    (player_tag,),
+                )
+                logger.warning("プレイヤーが見つかりません: %s", player_tag)
+            else:
+                logger.warning(
+                    "プレイヤーのバトルログ取得に失敗しました。tag=%s status=%s",
+                    player_tag,
+                    status_code,
+                )
             return (new_players, new_rank_logs, new_battle_logs)
 
         try:
