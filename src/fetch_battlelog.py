@@ -26,7 +26,7 @@ REQUEST_INTERVAL = 0.01
 # 最大リトライ回数
 MAX_RETRIES = 3
 # 取得サイクル時間
-ACQ_CYCLE_TIME = 3
+ACQ_CYCLE_TIME = 6
 # トロフィー境界
 TROPHIE_BORDER = 85000
 # 一度に取得するプレイヤー数
