@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 FETCH_BATCH_SIZE = 100_000
 
 
+def _parse_team_members(member_ids: Optional[str]) -> Tuple[int, ...]:
+    """GROUP_CONCAT されたキャラクターIDの文字列をタプルに変換する."""
+
+    if not member_ids:
+        return ()
+    return tuple(map(int, member_ids.split(",")))
+
+
 def _iter_cursor(cursor, batch_size: int) -> Iterator[Sequence[Tuple[Any, ...]]]:
     """指定したバッチサイズでカーソルを順次読み出す."""
 
@@ -151,36 +159,70 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
     log_memory_usage("battle_logs 加工後")
 
     logger.info("勝敗ログを読み込んでいます")
-    query_start = perf_counter()
-    cursor.execute(
-        """
-        SELECT wl.battle_log_id, wl.win_brawler_id, wl.lose_brawler_id
-        FROM win_lose_logs wl
-        JOIN battle_logs bl ON wl.battle_log_id = bl.id
-        JOIN rank_logs rl ON bl.rank_log_id = rl.id
-        WHERE rl.rank_id >= %s AND rl.id >= %s
-        """,
-        (MIN_RANK_ID, rank_log_id_lower_bound),
-    )
+    daily_rank_ranges: Dict[str, List[str]] = {}
+    for entry in rank_logs.values():
+        current = daily_rank_ranges.setdefault(entry.date_key, [entry.id, entry.id])
+        if entry.id < current[0]:
+            current[0] = entry.id
+        if entry.id > current[1]:
+            current[1] = entry.id
 
-    def _team_factory() -> Dict[str, Set[int]]:
-        return {"win": set(), "lose": set()}
-
-    battle_teams: Dict[str, Dict[str, Set[int]]] = defaultdict(_team_factory)
+    battle_teams: Dict[str, Tuple[Tuple[int, ...], Tuple[int, ...]]] = {}
     log_memory_usage("win_lose_logs 取得開始")
     processed_win_lose_rows = 0
-    for rows in _iter_cursor(cursor, FETCH_BATCH_SIZE):
-        for battle_log_id, win_brawler_id, lose_brawler_id in rows:
-            battle_id = str(battle_log_id)
-            if battle_id not in battle_rank_map:
-                continue
-            battle_teams[battle_id]["win"].add(int(win_brawler_id))
-            battle_teams[battle_id]["lose"].add(int(lose_brawler_id))
-        processed_win_lose_rows += len(rows)
+    processed_win_lose_groups = 0
+    win_lose_query_start = perf_counter()
+    for date_key in sorted(daily_rank_ranges):
+        min_rank_id, max_rank_id = daily_rank_ranges[date_key]
+        logger.info(
+            "勝敗ログ（日付: %s, rank_log_id: %s-%s）を取得しています",
+            date_key,
+            min_rank_id,
+            max_rank_id,
+        )
+        day_start = perf_counter()
+        cursor.execute(
+            """
+            SELECT
+                wl.battle_log_id,
+                GROUP_CONCAT(DISTINCT wl.win_brawler_id ORDER BY wl.win_brawler_id SEPARATOR ',') AS win_members,
+                GROUP_CONCAT(DISTINCT wl.lose_brawler_id ORDER BY wl.lose_brawler_id SEPARATOR ',') AS lose_members,
+                COUNT(*) AS row_count
+            FROM win_lose_logs wl
+            JOIN battle_logs bl ON wl.battle_log_id = bl.id
+            JOIN rank_logs rl ON bl.rank_log_id = rl.id
+            WHERE rl.rank_id >= %s AND rl.id BETWEEN %s AND %s
+            GROUP BY wl.battle_log_id
+            """,
+            (MIN_RANK_ID, min_rank_id, max_rank_id),
+        )
+        day_rows = 0
+        day_groups = 0
+        for rows in _iter_cursor(cursor, FETCH_BATCH_SIZE):
+            for battle_log_id, win_members, lose_members, row_count in rows:
+                battle_id = str(battle_log_id)
+                if battle_id not in battle_rank_map:
+                    continue
+                battle_teams[battle_id] = (
+                    _parse_team_members(win_members),
+                    _parse_team_members(lose_members),
+                )
+                processed_win_lose_rows += int(row_count)
+                processed_win_lose_groups += 1
+                day_rows += int(row_count)
+                day_groups += 1
+        logger.info(
+            "勝敗ログ（日付: %s）取得完了: ログ件数=%d, バトル件数=%d (%.2f秒)",
+            date_key,
+            day_rows,
+            day_groups,
+            perf_counter() - day_start,
+        )
     logger.info(
-        "勝敗ログ取得・加工完了: %d件 (%.2f秒)",
+        "勝敗ログ取得・加工完了: %d件, バトル=%d件 (%.2f秒)",
         processed_win_lose_rows,
-        perf_counter() - query_start,
+        processed_win_lose_groups,
+        perf_counter() - win_lose_query_start,
     )
     log_memory_usage("win_lose_logs 加工後")
 
@@ -225,14 +267,11 @@ def load_recent_ranked_battles(conn, since: str) -> StatsDataset:
         win_team: Tuple[int, ...] = ()
         lose_team: Tuple[int, ...] = ()
         if teams:
-            if teams["win"]:
-                win_members = {int(b) for b in teams["win"]}
-                win_team = tuple(sorted(win_members))
-                participants[rank_log_id].update(win_members)
-            if teams["lose"]:
-                lose_members = {int(b) for b in teams["lose"]}
-                lose_team = tuple(sorted(lose_members))
-                participants[rank_log_id].update(lose_members)
+            win_team, lose_team = teams
+            if win_team:
+                participants[rank_log_id].update(win_team)
+            if lose_team:
+                participants[rank_log_id].update(lose_team)
         battles.append(
             RankedBattle(
                 battle_log_id=battle_log_id,
