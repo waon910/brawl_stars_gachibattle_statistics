@@ -3,3 +3,6 @@
 
 -- INSERT INTO players(tag, name, highest_rank, last_fetched) 
 -- VALUES ("#8PQ0Y9Y0R", "かずまる🫧🌙", 21, '2000-01-01 00:00:00');
+
+INSERT INTO players(tag, last_fetched) VALUES
+('#URU20U02', '2000-01-01 00:00:00');
