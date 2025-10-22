@@ -357,6 +357,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                                 logger.info("マスターランク発見:%s", p_tag)
                             elif trophies > 15:
                                 logger.info("レジェンドランク発見:%s", p_tag)
+                            elif trophies > 12:
+                                logger.info("エピック発見:%s", p_tag)
                         if player_name:
                             cur.execute(
                                 "UPDATE players SET name=%s WHERE tag=%s AND (name IS NULL OR name='')",
@@ -475,7 +477,7 @@ def main() -> None:
             new_rank_logs_total = 0
             new_battle_logs_total = 0
 
-            new_players_total += fetch_rank_player(api_key, conn)
+            # new_players_total += fetch_rank_player(api_key, conn)
             rest = 0
 
             try:
