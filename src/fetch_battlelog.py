@@ -65,6 +65,52 @@ class ResultLog:
     brawlers: list[str] = field(default_factory=list)
 
 
+def _update_player_profile_from_latest_battle(
+    cur,
+    battle_logs: Sequence[dict],
+    player_tag: str,
+    player_name_in_db: Optional[str],
+    player_highest_rank: int,
+) -> tuple[Optional[str], int]:
+    """最新のバトルログからプレイヤー情報を更新する。
+
+    API から返却されるバトルログは新しい順で並んでいるため、先頭から
+    処理して最初に自身のプレイヤー情報を含むランク戦ログを探す。
+    ランク戦ログが既に保存済みであっても、ここで名前やランクの更新を
+    行うことで情報が最新に保たれる。
+    """
+
+    for battle in battle_logs:
+        battle_detail = battle.get("battle", {})
+        if battle_detail.get("type") not in ["soloRanked"]:
+            continue
+        teams = battle_detail.get("teams", [])
+        for team in teams:
+            for player in team:
+                if player.get("tag") != player_tag:
+                    continue
+                update_fields: list[str] = []
+                update_values: list[object] = []
+                player_name = player.get("name")
+                trophies = player.get("brawler", {}).get("trophies", 0)
+                if player_name and not player_name_in_db:
+                    update_fields.append("name=%s")
+                    update_values.append(player_name)
+                    player_name_in_db = player_name
+                if trophies is not None and trophies > player_highest_rank:
+                    update_fields.append("highest_rank=%s")
+                    update_values.append(trophies)
+                    player_highest_rank = trophies
+                if update_fields:
+                    update_values.append(player_tag)
+                    cur.execute(
+                        f"UPDATE players SET {', '.join(update_fields)} WHERE tag=%s",
+                        update_values,
+                    )
+                return player_name_in_db, player_highest_rank
+    return player_name_in_db, player_highest_rank
+
+
 def request_with_retry(
     url: str,
     headers: Optional[dict[str, str]] = None,
@@ -263,6 +309,14 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
         row = cur.fetchone()
         player_name_in_db = (row[0] if row and row[0] else None)
         player_highest_rank = row[1] if row and row[1] is not None else 0
+
+        player_name_in_db, player_highest_rank = _update_player_profile_from_latest_battle(
+            cur,
+            battle_logs,
+            player_tag,
+            player_name_in_db,
+            player_highest_rank,
+        )
 
         cur.execute(
             "UPDATE players SET last_fetched=%s WHERE tag=%s",
