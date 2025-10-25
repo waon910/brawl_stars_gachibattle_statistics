@@ -17,6 +17,7 @@ RANK_MATCH_COUNT_FILE_NAME="rank_match_counts.json"
 PAIR_STATS_DIR_NAME="pair_stats"
 TRIO_STATS_DIR_NAME="trio_stats"
 THREE_VS_THREE_STATS_DIR_NAME="three_vs_three_stats"
+MONITORED_PLAYER_STATS_FILE_NAME="monitored_player_stats.json"
 PID_FILE="${BASE_DIR}/.${SCRIPT_NAME}.pid"
 ENV_FILE="${BASE_DIR}/config/settings.env"
 LOCAL_ENV_FILE="${BASE_DIR}/.env.local"
@@ -206,6 +207,7 @@ main() {
     local output_file="${OUTPUT_DIR}/${WIN_RATE_FILE_NAME}"
     local star_output_file="${OUTPUT_DIR}/${STAR_RATE_FILE_NAME}"
     local rank_match_output_file="${OUTPUT_DIR}/${RANK_MATCH_COUNT_FILE_NAME}"
+    local monitored_output_file="${OUTPUT_DIR}/${MONITORED_PLAYER_STATS_FILE_NAME}"
     local pair_output_dir="${OUTPUT_DIR}/${PAIR_STATS_DIR_NAME}"
     local trio_output_dir="${OUTPUT_DIR}/${TRIO_STATS_DIR_NAME}"
     local three_vs_three_output_dir="${OUTPUT_DIR}/${THREE_VS_THREE_STATS_DIR_NAME}"
@@ -257,6 +259,17 @@ main() {
         log_warn "出力ファイルが空です: $star_output_file"
     fi
 
+    if [[ ! -f "$monitored_output_file" ]]; then
+        log_error "出力ファイルが見つかりません: $monitored_output_file"
+        exit 1
+    fi
+
+    log_info "出力ファイルを生成しました: $monitored_output_file"
+
+    if [[ ! -s "$monitored_output_file" ]]; then
+        log_warn "出力ファイルが空です: $monitored_output_file"
+    fi
+
     if [[ ! -f "$rank_match_output_file" ]]; then
         log_error "出力ファイルが見つかりません: $rank_match_output_file"
         exit 1
@@ -304,6 +317,7 @@ main() {
     local destination_win_rate="${APP_DIR}${COPY_PATH}${WIN_RATE_FILE_NAME}"
     local destination_star_rate="${APP_DIR}${COPY_PATH}${STAR_RATE_FILE_NAME}"
     local destination_rank_match="${APP_DIR}${COPY_PATH}${RANK_MATCH_COUNT_FILE_NAME}"
+    local destination_monitored_stats="${APP_DIR}${COPY_PATH}${MONITORED_PLAYER_STATS_FILE_NAME}"
     local destination_pair_stats="${APP_DIR}${COPY_PATH2}${PAIR_STATS_DIR_NAME}"
     local destination_trio_stats="${APP_DIR}${COPY_PATH}${TRIO_STATS_DIR_NAME}"
     local destination_three_vs_three_stats="${APP_DIR}${COPY_PATH}${THREE_VS_THREE_STATS_DIR_NAME}"
@@ -321,6 +335,11 @@ main() {
 
     if ! cp "$rank_match_output_file" "$destination_rank_match"; then
         log_error "rank_matchファイルのコピーに失敗しました"
+        exit 1
+    fi
+
+    if ! cp "$monitored_output_file" "$destination_monitored_stats"; then
+        log_error "監視対象プレイヤー統計ファイルのコピーに失敗しました"
         exit 1
     fi
 
