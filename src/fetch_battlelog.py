@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ResultLog:
     result: str = "不明"
-    brawlers: list[str] = field(default_factory=list)
+    brawlers: list[tuple[Optional[int], Optional[str]]] = field(default_factory=list)
 
 
 def _update_player_profile_from_latest_battle(
@@ -374,8 +374,10 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             for side_idx,team in enumerate(teams):
                 resultLog = ResultLog()
                 for player in team:
-                    resultLog.brawlers.append(player.get("brawler", {}).get("id", "不明"))
+                    brawler = player.get("brawler") or {}
+                    brawler_id = brawler.get("id")
                     p_tag = player.get("tag")
+                    resultLog.brawlers.append((brawler_id, p_tag))
                     player_name = player.get("name")
                     trophies = player.get("brawler", {}).get("trophies", 0)
                     if p_tag == player_tag:
@@ -499,10 +501,20 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
 
             winners = [b for r in resultInfo if r.result == "victory" for b in r.brawlers]
             losers = [b for r in resultInfo if r.result == "defeat" for b in r.brawlers]
-            pairs = {(w, l, battle_log_id) for w in winners for l in losers}
+            pairs = {
+                (w_id, w_tag, l_id, l_tag, battle_log_id)
+                for w_id, w_tag in winners
+                for l_id, l_tag in losers
+                if isinstance(w_id, int)
+                and isinstance(l_id, int)
+                and isinstance(w_tag, str)
+                and isinstance(l_tag, str)
+                and w_tag
+                and l_tag
+            }
             if pairs:
                 cur.executemany(
-                    "INSERT IGNORE INTO win_lose_logs(win_brawler_id, lose_brawler_id, battle_log_id) VALUES (%s, %s, %s)",
+                    "INSERT IGNORE INTO win_lose_logs(win_brawler_id, win_player_tag, lose_brawler_id, lose_player_tag, battle_log_id) VALUES (%s, %s, %s, %s, %s)",
                     list(pairs),
                 )
 
