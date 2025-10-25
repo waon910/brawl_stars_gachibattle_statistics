@@ -23,6 +23,11 @@ from .export_pair_stats import (
     fetch_matchup_stats as fetch_pair_matchup_stats,
     fetch_synergy_stats as fetch_pair_synergy_stats,
 )
+from .export_monitored_player_stats import (
+    MonitoredPlayerDataset,
+    export_monitored_player_stats,
+    fetch_monitored_player_dataset,
+)
 from .export_star_rates import compute_star_rates, fetch_star_rows
 from .export_trio_stats import export_trio_json
 from .export_win_rates import compute_win_rates, fetch_stats as fetch_win_rate_rows
@@ -106,6 +111,12 @@ def _export_three_vs_three_stats(
     export_matchup_json(results, output_dir)
 
 
+def _export_monitored_players(
+    dataset: MonitoredPlayerDataset, output_path: Path
+) -> None:
+    export_monitored_player_stats(dataset, output_path)
+
+
 def main() -> None:
     setup_logging()
 
@@ -146,6 +157,11 @@ def main() -> None:
         help="3対3統計のディレクトリ名",
     )
     parser.add_argument(
+        "--monitored-player-stats-filename",
+        default="monitored_player_stats.json",
+        help="監視対象プレイヤー統計のファイル名",
+    )
+    parser.add_argument(
         "--three-vs-three-min-games",
         type=int,
         default=4,
@@ -177,6 +193,8 @@ def main() -> None:
         dataset = load_recent_ranked_battles(conn, since)
         logger.info("ランクマッチ数を取得しています...")
         rank_match_counts = fetch_rank_match_counts(conn)
+        logger.info("監視対象プレイヤーのデータセットを取得しています...")
+        monitored_dataset = fetch_monitored_player_dataset(conn, since)
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
@@ -188,6 +206,7 @@ def main() -> None:
     pair_dir = output_root / args.pair_dir_name
     trio_dir = output_root / args.trio_dir_name
     three_vs_three_dir = output_root / args.three_vs_three_dir_name
+    monitored_player_stats_path = output_root / args.monitored_player_stats_filename
 
     logger.info(
         "共通データセット読み込み完了: rank_logs=%d, battles=%d, star_logs=%d",
@@ -197,6 +216,11 @@ def main() -> None:
     )
     log_memory_usage("共通データセット読み込み直後")
     logger.info("ランクマッチ数レコード件数: %d", len(rank_match_counts))
+    logger.info(
+        "監視対象プレイヤー: %d 人, バトル: %d 件",
+        len(monitored_dataset.players),
+        len(monitored_dataset.battles),
+    )
 
     tasks: Dict[str, Callable[[], None]] = {
         "win_rates": lambda: _export_win_rates(dataset, win_rate_path),
@@ -205,6 +229,9 @@ def main() -> None:
         "trio_stats": lambda: _export_trio_stats(dataset, trio_dir, since),
         "three_vs_three": lambda: _export_three_vs_three_stats(
             dataset, three_vs_three_dir, args.three_vs_three_min_games
+        ),
+        "monitored_player_stats": lambda: _export_monitored_players(
+            monitored_dataset, monitored_player_stats_path
         ),
     }
 
