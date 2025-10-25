@@ -540,7 +540,12 @@ def main() -> None:
                     seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
                     
                     cur.execute(
-                        "SELECT tag FROM players WHERE last_fetched < %s ORDER BY last_fetched ASC LIMIT %s",
+                        """
+                        SELECT tag FROM players
+                        WHERE last_fetched < %s
+                        ORDER BY is_monitored DESC, last_fetched ASC
+                        LIMIT %s
+                        """,
                         (seventy_two_hours_ago, FETCH_BATCH_SIZE),
                     )
                     rows = cur.fetchall()

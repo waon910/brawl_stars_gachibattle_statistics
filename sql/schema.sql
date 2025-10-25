@@ -2,7 +2,9 @@ CREATE TABLE IF NOT EXISTS players (
     tag VARCHAR(20) PRIMARY KEY,
     name VARCHAR(255),
     highest_rank INT NOT NULL DEFAULT 0,
-    last_fetched DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00'
+    last_fetched DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
+    is_monitored TINYINT(1) NOT NULL DEFAULT 0,
+    monitoring_started_at DATETIME NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS _modes (
@@ -65,4 +67,5 @@ CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
 CREATE INDEX idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
 CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs(star_brawler_id);
 CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
+CREATE INDEX idx_players_monitoring_fetch ON players(is_monitored, last_fetched);
 
