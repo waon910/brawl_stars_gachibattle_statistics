@@ -55,21 +55,19 @@ CREATE TABLE IF NOT EXISTS battle_logs (
 
 CREATE TABLE IF NOT EXISTS win_lose_logs (
     win_brawler_id INT NOT NULL,
-    win_player_tag VARCHAR(20) NOT NULL,
+    win_player_tag VARCHAR(20) NULL,
     lose_brawler_id INT NOT NULL,
-    lose_player_tag VARCHAR(20) NOT NULL,
+    lose_player_tag VARCHAR(20) NULL,
     battle_log_id VARCHAR(100) NOT NULL,
     PRIMARY KEY (win_brawler_id, lose_brawler_id, battle_log_id),
-    FOREIGN KEY (win_brawler_id) REFERENCES _brawlers(id),
-    FOREIGN KEY (win_player_tag) REFERENCES players(tag),
-    FOREIGN KEY (lose_brawler_id) REFERENCES _brawlers(id),
-    FOREIGN KEY (lose_player_tag) REFERENCES players(tag),
     FOREIGN KEY (battle_log_id) REFERENCES battle_logs(id)
- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_battle_logs_rank_log_id ON battle_logs(rank_log_id);
 CREATE INDEX idx_rank_logs_rank_map ON rank_logs(rank_id, map_id);
 CREATE INDEX idx_rank_star_logs_brawler ON rank_star_logs(star_brawler_id);
 CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
+CREATE INDEX idx_win_player_tag ON win_lose_logs(win_player_tag);
+CREATE INDEX idx_lose_player_tag ON win_lose_logs(lose_player_tag);
 CREATE INDEX idx_players_monitoring_fetch ON players(is_monitored, last_fetched);
 

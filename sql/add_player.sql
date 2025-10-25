@@ -5,4 +5,4 @@
 -- VALUES ("#8PQ0Y9Y0R", "かずまる🫧🌙", 21, '2000-01-01 00:00:00');
 
 INSERT INTO players(tag, last_fetched) VALUES
-('#2GQY9CR8', '2000-01-01 00:00:00');
+('#PQLOJ9RQG', '2000-01-01 00:00:00');
