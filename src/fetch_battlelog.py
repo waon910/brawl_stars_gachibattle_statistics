@@ -395,26 +395,6 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                     if p_tag == player_tag:
                         my_side_idx = side_idx
                         resultLog.result = result
-                        update_fields: list[str] = []
-                        update_values: list[object] = []
-                        if player_name and not player_name_in_db:
-                            update_fields.append("name=%s")
-                            update_values.append(player_name)
-                            player_name_in_db = player_name
-                        if trophies is not None and trophies != player_current_rank:
-                            update_fields.append("current_rank=%s")
-                            update_values.append(trophies)
-                            player_current_rank = trophies
-                        if trophies is not None and trophies > player_highest_rank:
-                            update_fields.append("highest_rank=%s")
-                            update_values.append(trophies)
-                            player_highest_rank = trophies
-                        if update_fields:
-                            update_values.append(player_tag)
-                            cur.execute(
-                                f"UPDATE players SET {', '.join(update_fields)} WHERE tag=%s",
-                                update_values,
-                            )
                         # if trophies < 7:
                         #     cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
                         #     if cur.rowcount == 1:  # 削除されたら1、既に存在しなかったら0
