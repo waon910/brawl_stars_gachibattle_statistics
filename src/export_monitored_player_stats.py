@@ -7,7 +7,6 @@ import json
 import logging
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Mapping
 
@@ -15,10 +14,8 @@ import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID
 
 logger = logging.getLogger(__name__)
-JST = timezone(timedelta(hours=9))
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +51,8 @@ def _empty_counter() -> Dict[str, int]:
     return {"wins": 0, "losses": 0, "mvp": 0}
 
 
-def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
-    """監視対象プレイヤーと対象期間のバトル情報を読み込む."""
+def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
+    """監視対象プレイヤーのバトル情報を全件読み込む."""
 
     cursor = conn.cursor()
     cursor.execute(
@@ -93,7 +90,6 @@ def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
             JOIN battle_logs bl ON bl.id = wll.battle_log_id
             JOIN rank_logs rl ON rl.id = bl.rank_log_id
             JOIN monitored_players mp ON mp.tag = wll.win_player_tag
-            WHERE rl.rank_id >= %s AND rl.id >= %s
             UNION ALL
             SELECT
                 wll.lose_player_tag AS player_tag,
@@ -106,7 +102,6 @@ def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
             JOIN battle_logs bl ON bl.id = wll.battle_log_id
             JOIN rank_logs rl ON rl.id = bl.rank_log_id
             JOIN monitored_players mp ON mp.tag = wll.lose_player_tag
-            WHERE rl.rank_id >= %s AND rl.id >= %s
         ),
         ranked_battles AS (
             SELECT
@@ -136,7 +131,7 @@ def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
         ORDER BY rb.player_tag, rb.rank_log_id, rb.battle_log_id
     """
 
-    cursor.execute(query, (MIN_RANK_ID, since, MIN_RANK_ID, since))
+    cursor.execute(query)
     battles: List[PlayerBattleRecord] = []
     fetched_rows = 0
     for player_tag, map_id, brawler_id, is_win, is_star in cursor.fetchall():
@@ -272,10 +267,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    jst_now = datetime.now(JST)
-    since = (jst_now - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    logger.info("統計対象期間（日数）: %d", DATA_RETENTION_DAYS)
-
     logger.info("データベースに接続しています")
     try:
         conn = get_connection()
@@ -283,12 +274,13 @@ def main() -> None:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        dataset = fetch_monitored_player_dataset(conn, since)
+        dataset = fetch_monitored_player_dataset(conn)
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
         conn.close()
 
+    logger.info("監視対象プレイヤーの全期間データを集計します")
     export_monitored_player_stats(dataset, Path(args.output))
 
 

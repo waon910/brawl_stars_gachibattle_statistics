@@ -193,8 +193,8 @@ def main() -> None:
         dataset = load_recent_ranked_battles(conn, since)
         logger.info("ランクマッチ数を取得しています...")
         rank_match_counts = fetch_rank_match_counts(conn)
-        logger.info("監視対象プレイヤーのデータセットを取得しています...")
-        monitored_dataset = fetch_monitored_player_dataset(conn, since)
+        logger.info("監視対象プレイヤーのデータセットを全期間から取得しています...")
+        monitored_dataset = fetch_monitored_player_dataset(conn)
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
