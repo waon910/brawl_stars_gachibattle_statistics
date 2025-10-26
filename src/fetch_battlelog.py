@@ -192,7 +192,23 @@ def cleanup_old_logs(conn) -> int:
     """設定された日数より前のログデータを削除"""
     cur = conn.cursor()
     threshold = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
-    cur.execute("SELECT id FROM rank_logs WHERE SUBSTRING(id, 1, 8) < %s", (threshold,))
+    cur.execute(
+        """
+        SELECT rl.id
+        FROM rank_logs rl
+        WHERE SUBSTRING(rl.id, 1, 8) < %s
+          AND NOT EXISTS (
+              SELECT 1
+              FROM battle_logs bl
+              JOIN win_lose_logs wll ON wll.battle_log_id = bl.id
+              LEFT JOIN players wp ON wp.tag = wll.win_player_tag AND wp.is_monitored = 1
+              LEFT JOIN players lp ON lp.tag = wll.lose_player_tag AND lp.is_monitored = 1
+              WHERE bl.rank_log_id = rl.id
+                AND (wp.tag IS NOT NULL OR lp.tag IS NOT NULL)
+          )
+        """,
+        (threshold,),
+    )
     old_rank_ids = [row[0] for row in cur.fetchall()]
     if not old_rank_ids:
         return 0
