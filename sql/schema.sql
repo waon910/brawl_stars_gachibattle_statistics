@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS players (
     tag VARCHAR(20) PRIMARY KEY,
     name VARCHAR(255),
     highest_rank INT NOT NULL DEFAULT 0,
+    current_rank INT NOT NULL DEFAULT 0,
     last_fetched DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
     is_monitored TINYINT(1) NOT NULL DEFAULT 0,
     monitoring_started_at DATETIME NULL DEFAULT NULL

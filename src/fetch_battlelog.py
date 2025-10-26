@@ -71,13 +71,14 @@ def _update_player_profile_from_latest_battle(
     player_tag: str,
     player_name_in_db: Optional[str],
     player_highest_rank: int,
-) -> tuple[Optional[str], int]:
+    player_current_rank: int,
+) -> tuple[Optional[str], int, int]:
     """最新のバトルログからプレイヤー情報を更新する。
 
     API から返却されるバトルログは新しい順で並んでいるため、先頭から
     処理して最初に自身のプレイヤー情報を含むランク戦ログを探す。
-    ランク戦ログが既に保存済みであっても、ここで名前やランクの更新を
-    行うことで情報が最新に保たれる。
+    ランク戦ログが既に保存済みであっても、ここで名前や最高ランク、
+    現在ランクの更新を行うことで情報が最新に保たれる。
     """
 
     for battle in battle_logs:
@@ -97,6 +98,11 @@ def _update_player_profile_from_latest_battle(
                     update_fields.append("name=%s")
                     update_values.append(player_name)
                     player_name_in_db = player_name
+                if trophies is not None:
+                    if trophies != player_current_rank:
+                        update_fields.append("current_rank=%s")
+                        update_values.append(trophies)
+                        player_current_rank = trophies
                 if trophies is not None and trophies > player_highest_rank:
                     update_fields.append("highest_rank=%s")
                     update_values.append(trophies)
@@ -107,8 +113,8 @@ def _update_player_profile_from_latest_battle(
                         f"UPDATE players SET {', '.join(update_fields)} WHERE tag=%s",
                         update_values,
                     )
-                return player_name_in_db, player_highest_rank
-    return player_name_in_db, player_highest_rank
+                return player_name_in_db, player_highest_rank, player_current_rank
+    return player_name_in_db, player_highest_rank, player_current_rank
 
 
 def request_with_retry(
@@ -303,19 +309,25 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             return (new_players, new_rank_logs, new_battle_logs)
 
         cur.execute(
-            "SELECT name, highest_rank FROM players WHERE tag=%s",
+            "SELECT name, highest_rank, current_rank FROM players WHERE tag=%s",
             (player_tag,),
         )
         row = cur.fetchone()
         player_name_in_db = (row[0] if row and row[0] else None)
         player_highest_rank = row[1] if row and row[1] is not None else 0
+        player_current_rank = row[2] if row and row[2] is not None else 0
 
-        player_name_in_db, player_highest_rank = _update_player_profile_from_latest_battle(
+        (
+            player_name_in_db,
+            player_highest_rank,
+            player_current_rank,
+        ) = _update_player_profile_from_latest_battle(
             cur,
             battle_logs,
             player_tag,
             player_name_in_db,
             player_highest_rank,
+            player_current_rank,
         )
 
         cur.execute(
@@ -323,7 +335,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             (datetime.now(JST), player_tag),
         )
 
-        rank=0
+        rank = 0
         new_rank_flag = False            
         new_rank_brawlers_flag = False   
         rank_log_id = None   
@@ -389,6 +401,10 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                             update_fields.append("name=%s")
                             update_values.append(player_name)
                             player_name_in_db = player_name
+                        if trophies is not None and trophies != player_current_rank:
+                            update_fields.append("current_rank=%s")
+                            update_values.append(trophies)
+                            player_current_rank = trophies
                         if trophies is not None and trophies > player_highest_rank:
                             update_fields.append("highest_rank=%s")
                             update_values.append(trophies)
@@ -422,8 +438,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                             )
                         if trophies is not None:
                             cur.execute(
-                                "UPDATE players SET highest_rank=%s WHERE tag=%s AND highest_rank < %s",
-                                (trophies, p_tag, trophies),
+                                "UPDATE players SET current_rank=%s, highest_rank=GREATEST(highest_rank, %s) WHERE tag=%s",
+                                (trophies, trophies, p_tag),
                             )
                     if rank < trophies <= 22:
                         rank = trophies
