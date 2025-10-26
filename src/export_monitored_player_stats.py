@@ -27,6 +27,8 @@ class MonitoredPlayer:
 
     tag: str
     name: str | None
+    highest_rank_id: int | None
+    current_rank_id: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,10 +58,17 @@ def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
     """監視対象プレイヤーと対象期間のバトル情報を読み込む."""
 
     cursor = conn.cursor()
-    cursor.execute("SELECT tag, name FROM players WHERE is_monitored = 1")
+    cursor.execute(
+        "SELECT tag, name, highest_rank, current_rank FROM players WHERE is_monitored = 1"
+    )
     players: Dict[str, MonitoredPlayer] = {}
-    for tag, name in cursor.fetchall():
-        players[str(tag)] = MonitoredPlayer(tag=str(tag), name=str(name) if name else None)
+    for tag, name, highest_rank, current_rank in cursor.fetchall():
+        players[str(tag)] = MonitoredPlayer(
+            tag=str(tag),
+            name=str(name) if name else None,
+            highest_rank_id=int(highest_rank) if highest_rank is not None else None,
+            current_rank_id=int(current_rank) if current_rank is not None else None,
+        )
 
     if not players:
         cursor.close()
@@ -146,6 +155,8 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
     for player_tag, player in dataset.players.items():
         results[player_tag] = {
             "name": player.name,
+            "highest_rank_id": player.highest_rank_id,
+            "current_rank_id": player.current_rank_id,
             "per_map_per_brawler": {},
             "per_map_loss_ranking": {},
             "per_map_overall": {},
