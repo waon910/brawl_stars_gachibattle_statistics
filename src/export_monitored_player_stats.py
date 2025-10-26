@@ -83,47 +83,57 @@ def fetch_monitored_player_dataset(conn, since: str) -> MonitoredPlayerDataset:
         ),
         player_battles AS (
             SELECT
-                raw.player_tag,
-                raw.rank_log_id,
-                raw.map_id,
-                raw.brawler_id,
-                MAX(raw.is_win) AS is_win
-            FROM (
-                SELECT
-                    wll.win_player_tag AS player_tag,
-                    bl.rank_log_id,
-                    rl.map_id,
-                    wll.win_brawler_id AS brawler_id,
-                    1 AS is_win
-                FROM win_lose_logs wll
-                JOIN battle_logs bl ON bl.id = wll.battle_log_id
-                JOIN rank_logs rl ON rl.id = bl.rank_log_id
-                JOIN monitored_players mp ON mp.tag = wll.win_player_tag
-                WHERE rl.rank_id >= %s AND rl.id >= %s
-                UNION ALL
-                SELECT
-                    wll.lose_player_tag AS player_tag,
-                    bl.rank_log_id,
-                    rl.map_id,
-                    wll.lose_brawler_id AS brawler_id,
-                    0 AS is_win
-                FROM win_lose_logs wll
-                JOIN battle_logs bl ON bl.id = wll.battle_log_id
-                JOIN rank_logs rl ON rl.id = bl.rank_log_id
-                JOIN monitored_players mp ON mp.tag = wll.lose_player_tag
-                WHERE rl.rank_id >= %s AND rl.id >= %s
-            ) AS raw
-            GROUP BY raw.player_tag, raw.rank_log_id, raw.map_id, raw.brawler_id
+                wll.win_player_tag AS player_tag,
+                bl.id AS battle_log_id,
+                bl.rank_log_id,
+                rl.map_id,
+                wll.win_brawler_id AS brawler_id,
+                1 AS is_win
+            FROM win_lose_logs wll
+            JOIN battle_logs bl ON bl.id = wll.battle_log_id
+            JOIN rank_logs rl ON rl.id = bl.rank_log_id
+            JOIN monitored_players mp ON mp.tag = wll.win_player_tag
+            WHERE rl.rank_id >= %s AND rl.id >= %s
+            UNION ALL
+            SELECT
+                wll.lose_player_tag AS player_tag,
+                bl.id AS battle_log_id,
+                bl.rank_log_id,
+                rl.map_id,
+                wll.lose_brawler_id AS brawler_id,
+                0 AS is_win
+            FROM win_lose_logs wll
+            JOIN battle_logs bl ON bl.id = wll.battle_log_id
+            JOIN rank_logs rl ON rl.id = bl.rank_log_id
+            JOIN monitored_players mp ON mp.tag = wll.lose_player_tag
+            WHERE rl.rank_id >= %s AND rl.id >= %s
+        ),
+        ranked_battles AS (
+            SELECT
+                pb.player_tag,
+                pb.rank_log_id,
+                pb.map_id,
+                pb.brawler_id,
+                pb.is_win,
+                ROW_NUMBER() OVER (
+                    PARTITION BY pb.player_tag, pb.rank_log_id, pb.brawler_id
+                    ORDER BY pb.battle_log_id
+                ) AS brawler_row_number,
+                pb.battle_log_id
+            FROM player_battles pb
         )
         SELECT
-            pb.player_tag,
-            pb.map_id,
-            pb.brawler_id,
-            pb.is_win,
-            CASE WHEN rsl.star_brawler_id = pb.brawler_id THEN 1 ELSE 0 END AS is_star
-        FROM player_battles pb
-        LEFT JOIN rank_star_logs rsl ON rsl.rank_log_id = pb.rank_log_id
-        ORDER BY pb.player_tag, pb.rank_log_id
+            rb.player_tag,
+            rb.map_id,
+            rb.brawler_id,
+            rb.is_win,
+            CASE
+                WHEN rsl.star_brawler_id = rb.brawler_id AND rb.brawler_row_number = 1 THEN 1
+                ELSE 0
+            END AS is_star
+        FROM ranked_battles rb
+        LEFT JOIN rank_star_logs rsl ON rsl.rank_log_id = rb.rank_log_id
+        ORDER BY rb.player_tag, rb.rank_log_id, rb.battle_log_id
     """
 
     cursor.execute(query, (MIN_RANK_ID, since, MIN_RANK_ID, since))
