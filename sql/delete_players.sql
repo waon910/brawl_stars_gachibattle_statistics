@@ -1,0 +1,2 @@
+DELETE FROM players
+WHERE tag = '#PGRGOY2GU';

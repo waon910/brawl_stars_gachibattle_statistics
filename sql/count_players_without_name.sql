@@ -6,9 +6,16 @@
 -- WHERE
 --     name IS NULL;
 
+-- SELECT
+--     *
+-- FROM
+--     players
+-- WHERE
+--     name IS NULL;
+
 SELECT
     *
 FROM
     players
 WHERE
-    name IS NULL;
+    is_monitored = 1;
