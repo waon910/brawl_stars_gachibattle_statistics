@@ -33,7 +33,7 @@ class PlayerBattleRecord:
     """プレイヤー単位のバトル結果."""
 
     player_tag: str
-    rank_log_id: int
+    rank_log_id: str
     map_id: int
     brawler_id: int
     is_win: bool
@@ -141,7 +141,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         battles.append(
             PlayerBattleRecord(
                 player_tag=str(player_tag),
-                rank_log_id=int(rank_log_id),
+                rank_log_id=str(rank_log_id),
                 map_id=int(map_id),
                 brawler_id=int(brawler_id),
                 is_win=bool(is_win),
@@ -174,9 +174,9 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
     per_player_map_brawler: Dict[str, Dict[int, Dict[int, Dict[str, int]]]] = {}
     per_player_map_totals: Dict[str, Dict[int, Dict[str, int]]] = {}
     per_player_totals: Dict[str, Dict[str, int]] = {tag: _empty_counter() for tag in dataset.players}
-    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, Set[int]]]] = {}
-    per_player_map_rank_logs: Dict[str, Dict[int, Set[int]]] = {}
-    per_player_rank_logs: Dict[str, Set[int]] = {tag: set() for tag in dataset.players}
+    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, Set[str]]]] = {}
+    per_player_map_rank_logs: Dict[str, Dict[int, Set[str]]] = {}
+    per_player_rank_logs: Dict[str, Set[str]] = {tag: set() for tag in dataset.players}
 
     for record in dataset.battles:
         if record.player_tag not in dataset.players:
@@ -212,9 +212,10 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             total_counter["mvp"] += 1
             overall_counter["mvp"] += 1
 
-        brawler_rank_logs.add(record.rank_log_id)
-        map_rank_logs.add(record.rank_log_id)
-        overall_rank_logs.add(record.rank_log_id)
+        rank_log_key = str(record.rank_log_id)
+        brawler_rank_logs.add(rank_log_key)
+        map_rank_logs.add(rank_log_key)
+        overall_rank_logs.add(rank_log_key)
 
     for player_tag, player_result in results.items():
         map_brawlers = per_player_map_brawler.get(player_tag, {})
