@@ -8,7 +8,7 @@ import logging
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Mapping
+from typing import Dict, List, Mapping, Set
 
 import mysql.connector
 
@@ -33,6 +33,7 @@ class PlayerBattleRecord:
     """プレイヤー単位のバトル結果."""
 
     player_tag: str
+    rank_log_id: int
     map_id: int
     brawler_id: int
     is_win: bool
@@ -119,6 +120,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         )
         SELECT
             rb.player_tag,
+            rb.rank_log_id,
             rb.map_id,
             rb.brawler_id,
             rb.is_win,
@@ -134,11 +136,12 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     cursor.execute(query)
     battles: List[PlayerBattleRecord] = []
     fetched_rows = 0
-    for player_tag, map_id, brawler_id, is_win, is_star in cursor.fetchall():
+    for player_tag, rank_log_id, map_id, brawler_id, is_win, is_star in cursor.fetchall():
         fetched_rows += 1
         battles.append(
             PlayerBattleRecord(
                 player_tag=str(player_tag),
+                rank_log_id=int(rank_log_id),
                 map_id=int(map_id),
                 brawler_id=int(brawler_id),
                 is_win=bool(is_win),
@@ -165,12 +168,15 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             "per_map_per_brawler": {},
             "per_map_loss_ranking": {},
             "per_map_overall": {},
-            "overall": _convert_counter(_empty_counter()),
+            "overall": _convert_counter(_empty_counter(), 0),
         }
 
     per_player_map_brawler: Dict[str, Dict[int, Dict[int, Dict[str, int]]]] = {}
     per_player_map_totals: Dict[str, Dict[int, Dict[str, int]]] = {}
     per_player_totals: Dict[str, Dict[str, int]] = {tag: _empty_counter() for tag in dataset.players}
+    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, Set[int]]]] = {}
+    per_player_map_rank_logs: Dict[str, Dict[int, Set[int]]] = {}
+    per_player_rank_logs: Dict[str, Set[int]] = {tag: set() for tag in dataset.players}
 
     for record in dataset.battles:
         if record.player_tag not in dataset.players:
@@ -182,6 +188,16 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             record.map_id, _empty_counter()
         )
         overall_counter = per_player_totals.setdefault(record.player_tag, _empty_counter())
+        brawler_rank_logs = (
+            per_player_map_brawler_rank_logs.setdefault(record.player_tag, {})
+            .setdefault(record.map_id, {})
+            .setdefault(record.brawler_id, set())
+        )
+        map_rank_logs = (
+            per_player_map_rank_logs.setdefault(record.player_tag, {})
+            .setdefault(record.map_id, set())
+        )
+        overall_rank_logs = per_player_rank_logs.setdefault(record.player_tag, set())
 
         if record.is_win:
             counter["wins"] += 1
@@ -196,10 +212,17 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             total_counter["mvp"] += 1
             overall_counter["mvp"] += 1
 
+        brawler_rank_logs.add(record.rank_log_id)
+        map_rank_logs.add(record.rank_log_id)
+        overall_rank_logs.add(record.rank_log_id)
+
     for player_tag, player_result in results.items():
         map_brawlers = per_player_map_brawler.get(player_tag, {})
         map_totals = per_player_map_totals.get(player_tag, {})
         totals_counter = per_player_totals.get(player_tag, _empty_counter())
+        map_brawler_rank_logs = per_player_map_brawler_rank_logs.get(player_tag, {})
+        map_rank_logs = per_player_map_rank_logs.get(player_tag, {})
+        overall_rank_logs = per_player_rank_logs.get(player_tag, set())
 
         per_map_per_brawler: Dict[str, Dict[str, object]] = {}
         per_map_loss_ranking: Dict[str, List[Dict[str, int]]] = {}
@@ -210,7 +233,12 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             per_brawler: Dict[str, object] = {}
             loss_ranking: List[Dict[str, int]] = []
             for brawler_id, counter in brawler_stats.items():
-                per_brawler[str(brawler_id)] = _convert_counter(counter)
+                rank_log_ids = (
+                    map_brawler_rank_logs.get(map_id, {}).get(brawler_id, set())
+                    if map_brawler_rank_logs
+                    else set()
+                )
+                per_brawler[str(brawler_id)] = _convert_counter(counter, len(rank_log_ids))
                 losses = counter["losses"]
                 if losses > 0:
                     loss_ranking.append({"brawler_id": brawler_id, "losses": losses})
@@ -219,27 +247,30 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             per_map_loss_ranking[map_key] = loss_ranking
 
         for map_id, counter in map_totals.items():
-            per_map_overall[str(map_id)] = _convert_counter(counter)
+            rank_log_ids = map_rank_logs.get(map_id, set()) if map_rank_logs else set()
+            per_map_overall[str(map_id)] = _convert_counter(counter, len(rank_log_ids))
 
         player_result["per_map_per_brawler"] = per_map_per_brawler
         player_result["per_map_loss_ranking"] = per_map_loss_ranking
         player_result["per_map_overall"] = per_map_overall
-        player_result["overall"] = _convert_counter(totals_counter)
+        player_result["overall"] = _convert_counter(totals_counter, len(overall_rank_logs))
 
     return {"players": results}
 
 
-def _convert_counter(counter: Mapping[str, int]) -> Dict[str, object]:
+def _convert_counter(counter: Mapping[str, int], rank_games: int | None = None) -> Dict[str, object]:
     wins = int(counter.get("wins", 0))
     losses = int(counter.get("losses", 0))
     mvp = int(counter.get("mvp", 0))
     games = wins + losses
+    rank_games_value = rank_games if rank_games is not None else games
     win_rate = round((wins / games) * 100, 2) if games else 0.0
-    mvp_rate = round((mvp / games) * 100, 2) if games else 0.0
+    mvp_rate = round((mvp / rank_games_value) * 100, 2) if rank_games_value else 0.0
     return {
         "wins": wins,
         "losses": losses,
         "games": games,
+        "rank_games": rank_games_value,
         "win_rate": win_rate,
         "mvp_count": mvp,
         "mvp_rate": mvp_rate,
