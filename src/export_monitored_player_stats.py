@@ -6,9 +6,10 @@ import argparse
 import json
 import logging
 
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Mapping, Set
+from typing import Dict, List, Mapping
 
 import mysql.connector
 
@@ -37,7 +38,32 @@ class PlayerBattleRecord:
     map_id: int
     brawler_id: int
     is_win: bool
-    is_star: bool
+
+
+@dataclass(slots=True)
+class BattleStats:
+    """勝敗数を保持するシンプルなカウンタ."""
+
+    wins: int = 0
+    losses: int = 0
+
+    def register_result(self, is_win: bool) -> None:
+        if is_win:
+            self.wins += 1
+        else:
+            self.losses += 1
+
+    def to_dict(self, rank_games: int | None = None) -> Dict[str, object]:
+        games = self.wins + self.losses
+        rank_games_value = rank_games if rank_games is not None else games
+        win_rate = round((self.wins / games) * 100, 2) if games else 0.0
+        return {
+            "wins": self.wins,
+            "losses": self.losses,
+            "games": games,
+            "rank_games": rank_games_value,
+            "win_rate": win_rate,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,10 +72,6 @@ class MonitoredPlayerDataset:
 
     players: Mapping[str, MonitoredPlayer]
     battles: List[PlayerBattleRecord]
-
-
-def _empty_counter() -> Dict[str, int]:
-    return {"wins": 0, "losses": 0, "mvp": 0}
 
 
 def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
@@ -82,61 +104,35 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         player_battles AS (
             SELECT
                 wll.win_player_tag AS player_tag,
-                bl.id AS battle_log_id,
-                bl.rank_log_id,
-                rl.map_id,
+                wll.battle_log_id,
                 wll.win_brawler_id AS brawler_id,
                 1 AS is_win
             FROM win_lose_logs wll
-            JOIN battle_logs bl ON bl.id = wll.battle_log_id
-            JOIN rank_logs rl ON rl.id = bl.rank_log_id
             JOIN monitored_players mp ON mp.tag = wll.win_player_tag
             UNION ALL
             SELECT
                 wll.lose_player_tag AS player_tag,
-                bl.id AS battle_log_id,
-                bl.rank_log_id,
-                rl.map_id,
+                wll.battle_log_id,
                 wll.lose_brawler_id AS brawler_id,
                 0 AS is_win
             FROM win_lose_logs wll
-            JOIN battle_logs bl ON bl.id = wll.battle_log_id
-            JOIN rank_logs rl ON rl.id = bl.rank_log_id
             JOIN monitored_players mp ON mp.tag = wll.lose_player_tag
-        ),
-        ranked_battles AS (
-            SELECT
-                pb.player_tag,
-                pb.rank_log_id,
-                pb.map_id,
-                pb.brawler_id,
-                pb.is_win,
-                ROW_NUMBER() OVER (
-                    PARTITION BY pb.player_tag, pb.rank_log_id, pb.brawler_id
-                    ORDER BY pb.battle_log_id
-                ) AS brawler_row_number,
-                pb.battle_log_id
-            FROM player_battles pb
         )
         SELECT
-            rb.player_tag,
-            rb.rank_log_id,
-            rb.map_id,
-            rb.brawler_id,
-            rb.is_win,
-            CASE
-                WHEN rsl.star_brawler_id = rb.brawler_id AND rb.brawler_row_number = 1 THEN 1
-                ELSE 0
-            END AS is_star
-        FROM ranked_battles rb
-        LEFT JOIN rank_star_logs rsl ON rsl.rank_log_id = rb.rank_log_id
-        ORDER BY rb.player_tag, rb.rank_log_id, rb.battle_log_id
+            pb.player_tag,
+            bl.rank_log_id,
+            rl.map_id,
+            pb.brawler_id,
+            pb.is_win
+        FROM player_battles pb
+        JOIN battle_logs bl ON bl.id = pb.battle_log_id
+        JOIN rank_logs rl ON rl.id = bl.rank_log_id
     """
 
     cursor.execute(query)
     battles: List[PlayerBattleRecord] = []
     fetched_rows = 0
-    for player_tag, rank_log_id, map_id, brawler_id, is_win, is_star in cursor.fetchall():
+    for player_tag, rank_log_id, map_id, brawler_id, is_win in cursor.fetchall():
         fetched_rows += 1
         battles.append(
             PlayerBattleRecord(
@@ -145,7 +141,6 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
                 map_id=int(map_id),
                 brawler_id=int(brawler_id),
                 is_win=bool(is_win),
-                is_star=bool(is_star),
             )
         )
     cursor.close()
@@ -158,69 +153,47 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
 def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str, object]:
     """監視対象プレイヤーごとの統計情報を集計する."""
 
-    results: Dict[str, Dict[str, object]] = {}
+    per_player_map_brawler: Dict[str, Dict[int, Dict[int, BattleStats]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(BattleStats))
+    )
+    per_player_map_totals: Dict[str, Dict[int, BattleStats]] = defaultdict(
+        lambda: defaultdict(BattleStats)
+    )
+    per_player_totals: Dict[str, BattleStats] = defaultdict(BattleStats)
+    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, set[str]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(set))
+    )
+    per_player_map_rank_logs: Dict[str, Dict[int, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    per_player_rank_logs: Dict[str, set[str]] = defaultdict(set)
 
-    for player_tag, player in dataset.players.items():
-        results[player_tag] = {
-            "name": player.name,
-            "highest_rank_id": player.highest_rank_id,
-            "current_rank_id": player.current_rank_id,
-            "per_map_per_brawler": {},
-            "per_map_loss_ranking": {},
-            "per_map_overall": {},
-            "overall": _convert_counter(_empty_counter(), 0),
-        }
-
-    per_player_map_brawler: Dict[str, Dict[int, Dict[int, Dict[str, int]]]] = {}
-    per_player_map_totals: Dict[str, Dict[int, Dict[str, int]]] = {}
-    per_player_totals: Dict[str, Dict[str, int]] = {tag: _empty_counter() for tag in dataset.players}
-    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, Set[str]]]] = {}
-    per_player_map_rank_logs: Dict[str, Dict[int, Set[str]]] = {}
-    per_player_rank_logs: Dict[str, Set[str]] = {tag: set() for tag in dataset.players}
+    monitored_players = dataset.players
 
     for record in dataset.battles:
-        if record.player_tag not in dataset.players:
+        if record.player_tag not in monitored_players:
             continue
-        map_stats = per_player_map_brawler.setdefault(record.player_tag, {})
-        brawler_stats = map_stats.setdefault(record.map_id, {})
-        counter = brawler_stats.setdefault(record.brawler_id, _empty_counter())
-        total_counter = per_player_map_totals.setdefault(record.player_tag, {}).setdefault(
-            record.map_id, _empty_counter()
-        )
-        overall_counter = per_player_totals.setdefault(record.player_tag, _empty_counter())
-        brawler_rank_logs = (
-            per_player_map_brawler_rank_logs.setdefault(record.player_tag, {})
-            .setdefault(record.map_id, {})
-            .setdefault(record.brawler_id, set())
-        )
-        map_rank_logs = (
-            per_player_map_rank_logs.setdefault(record.player_tag, {})
-            .setdefault(record.map_id, set())
-        )
-        overall_rank_logs = per_player_rank_logs.setdefault(record.player_tag, set())
 
-        if record.is_win:
-            counter["wins"] += 1
-            total_counter["wins"] += 1
-            overall_counter["wins"] += 1
-        else:
-            counter["losses"] += 1
-            total_counter["losses"] += 1
-            overall_counter["losses"] += 1
-        if record.is_star:
-            counter["mvp"] += 1
-            total_counter["mvp"] += 1
-            overall_counter["mvp"] += 1
+        player_tag = record.player_tag
+        map_id = record.map_id
+        brawler_id = record.brawler_id
 
-        rank_log_key = str(record.rank_log_id)
-        brawler_rank_logs.add(rank_log_key)
-        map_rank_logs.add(rank_log_key)
-        overall_rank_logs.add(rank_log_key)
+        brawler_stats = per_player_map_brawler[player_tag][map_id][brawler_id]
+        brawler_stats.register_result(record.is_win)
 
-    for player_tag, player_result in results.items():
+        per_player_map_totals[player_tag][map_id].register_result(record.is_win)
+        per_player_totals[player_tag].register_result(record.is_win)
+
+        rank_log_id = record.rank_log_id
+        per_player_map_brawler_rank_logs[player_tag][map_id][brawler_id].add(rank_log_id)
+        per_player_map_rank_logs[player_tag][map_id].add(rank_log_id)
+        per_player_rank_logs[player_tag].add(rank_log_id)
+
+    results: Dict[str, Dict[str, object]] = {}
+
+    for player_tag, player in monitored_players.items():
         map_brawlers = per_player_map_brawler.get(player_tag, {})
         map_totals = per_player_map_totals.get(player_tag, {})
-        totals_counter = per_player_totals.get(player_tag, _empty_counter())
         map_brawler_rank_logs = per_player_map_brawler_rank_logs.get(player_tag, {})
         map_rank_logs = per_player_map_rank_logs.get(player_tag, {})
         overall_rank_logs = per_player_rank_logs.get(player_tag, set())
@@ -233,49 +206,34 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             map_key = str(map_id)
             per_brawler: Dict[str, object] = {}
             loss_ranking: List[Dict[str, int]] = []
-            for brawler_id, counter in brawler_stats.items():
-                rank_log_ids = (
-                    map_brawler_rank_logs.get(map_id, {}).get(brawler_id, set())
-                    if map_brawler_rank_logs
-                    else set()
-                )
-                per_brawler[str(brawler_id)] = _convert_counter(counter, len(rank_log_ids))
-                losses = counter["losses"]
-                if losses > 0:
-                    loss_ranking.append({"brawler_id": brawler_id, "losses": losses})
+            rank_logs_by_brawler = map_brawler_rank_logs.get(map_id, {}) if map_brawler_rank_logs else {}
+
+            for brawler_id, stats in brawler_stats.items():
+                rank_log_ids = rank_logs_by_brawler.get(brawler_id, set())
+                per_brawler[str(brawler_id)] = stats.to_dict(len(rank_log_ids))
+                if stats.losses > 0:
+                    loss_ranking.append({"brawler_id": brawler_id, "losses": stats.losses})
+
             loss_ranking.sort(key=lambda item: (-item["losses"], item["brawler_id"]))
             per_map_per_brawler[map_key] = per_brawler
             per_map_loss_ranking[map_key] = loss_ranking
 
-        for map_id, counter in map_totals.items():
+        for map_id, stats in map_totals.items():
             rank_log_ids = map_rank_logs.get(map_id, set()) if map_rank_logs else set()
-            per_map_overall[str(map_id)] = _convert_counter(counter, len(rank_log_ids))
+            per_map_overall[str(map_id)] = stats.to_dict(len(rank_log_ids))
 
-        player_result["per_map_per_brawler"] = per_map_per_brawler
-        player_result["per_map_loss_ranking"] = per_map_loss_ranking
-        player_result["per_map_overall"] = per_map_overall
-        player_result["overall"] = _convert_counter(totals_counter, len(overall_rank_logs))
+        overall_stats = per_player_totals.get(player_tag, BattleStats())
+        results[player_tag] = {
+            "name": player.name,
+            "highest_rank_id": player.highest_rank_id,
+            "current_rank_id": player.current_rank_id,
+            "per_map_per_brawler": per_map_per_brawler,
+            "per_map_loss_ranking": per_map_loss_ranking,
+            "per_map_overall": per_map_overall,
+            "overall": overall_stats.to_dict(len(overall_rank_logs)),
+        }
 
     return {"players": results}
-
-
-def _convert_counter(counter: Mapping[str, int], rank_games: int | None = None) -> Dict[str, object]:
-    wins = int(counter.get("wins", 0))
-    losses = int(counter.get("losses", 0))
-    mvp = int(counter.get("mvp", 0))
-    games = wins + losses
-    rank_games_value = rank_games if rank_games is not None else games
-    win_rate = round((wins / games) * 100, 2) if games else 0.0
-    mvp_rate = round((mvp / rank_games_value) * 100, 2) if rank_games_value else 0.0
-    return {
-        "wins": wins,
-        "losses": losses,
-        "games": games,
-        "rank_games": rank_games_value,
-        "win_rate": win_rate,
-        "mvp_count": mvp,
-        "mvp_rate": mvp_rate,
-    }
 
 
 def export_monitored_player_stats(dataset: MonitoredPlayerDataset, output: Path) -> None:
