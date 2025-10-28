@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS rank_logs (
 CREATE TABLE IF NOT EXISTS rank_star_logs (
     rank_log_id VARCHAR(50) PRIMARY KEY,
     star_brawler_id INT NOT NULL,
+    star_player_tag VARCHAR(20) NULL,
     FOREIGN KEY (rank_log_id) REFERENCES rank_logs(id) ON DELETE CASCADE,
     FOREIGN KEY (star_brawler_id) REFERENCES _brawlers(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

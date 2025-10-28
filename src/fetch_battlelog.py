@@ -369,15 +369,15 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             if battle_datetime < col_start_date:
                 continue
             star_player = battle_detail.get("starPlayer") or {}
-            star_tag = star_player.get("tag")
+            star_player_tag = star_player.get("tag")
             star_brawler_id = (
                 star_player.get("brawler", {}).get("id")
                 if isinstance(star_player.get("brawler"), dict)
                 else None
             )
-            if star_tag:
+            if star_player_tag:
                 new_rank_flag = True
-                rank_log_id = f"{battle_time}_{star_tag}"
+                rank_log_id = f"{battle_time}_{star_player_tag}"
                 # ここですでに存在しているランクマッチを確認
                 cur.execute(
                     "SELECT id FROM rank_logs WHERE id=%s",
@@ -449,7 +449,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             if new_rank_brawlers_flag:
                 map_id = MAP_NAME_TO_ID.get(battle_map)
                 rank_id = RANK_TO_ID.get(rank)
-                rank_log_id = f"{battle_time}_{star_tag}"
+                rank_log_id = f"{battle_time}_{star_player_tag}"
                 #新規ランクマッチ登録
                 inserted_rank_log = False
                 try:
@@ -488,9 +488,12 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                         inserted_rank_log = True
                 if inserted_rank_log and star_brawler_id:
                     cur.execute(
-                        "INSERT INTO rank_star_logs(rank_log_id, star_brawler_id) VALUES (%s, %s) "
-                        "ON DUPLICATE KEY UPDATE star_brawler_id=VALUES(star_brawler_id)",
-                        (rank_log_id, star_brawler_id),
+                        "INSERT INTO rank_star_logs(rank_log_id, star_brawler_id, star_player_tag)"
+                        " VALUES (%s, %s, %s) "
+                        "ON DUPLICATE KEY UPDATE "
+                        "star_brawler_id=VALUES(star_brawler_id), "
+                        "star_player_tag=VALUES(star_player_tag)",
+                        (rank_log_id, star_brawler_id, star_player_tag),
                     )
                 new_rank_brawlers_flag = False
 
