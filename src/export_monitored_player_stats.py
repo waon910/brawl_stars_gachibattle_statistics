@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping
@@ -73,6 +71,51 @@ class MonitoredPlayerDataset:
 
     players: Mapping[str, MonitoredPlayer]
     battles: List[PlayerBattleRecord]
+
+
+@dataclass(slots=True)
+class AggregatedStats:
+    """勝敗集計と紐づくランクログID集合を保持するヘルパー."""
+
+    stats: BattleStats
+    rank_log_ids: set[str]
+
+    def __init__(self) -> None:
+        self.stats = BattleStats()
+        self.rank_log_ids = set()
+
+    def register(self, is_win: bool, rank_log_id: str) -> None:
+        self.stats.register_result(is_win)
+        self.rank_log_ids.add(rank_log_id)
+
+    def to_dict(self) -> Dict[str, object]:
+        return self.stats.to_dict(len(self.rank_log_ids))
+
+
+@dataclass(slots=True)
+class PlayerAggregation:
+    """監視対象プレイヤー単位の集計データ."""
+
+    per_map_per_brawler: Dict[int, Dict[int, AggregatedStats]]
+    per_map_totals: Dict[int, AggregatedStats]
+    overall: AggregatedStats
+
+    def __init__(self) -> None:
+        self.per_map_per_brawler = {}
+        self.per_map_totals = {}
+        self.overall = AggregatedStats()
+
+    def register_battle(
+        self, map_id: int, brawler_id: int, is_win: bool, rank_log_id: str
+    ) -> None:
+        map_brawlers = self.per_map_per_brawler.setdefault(map_id, {})
+        brawler_aggregation = map_brawlers.setdefault(brawler_id, AggregatedStats())
+        brawler_aggregation.register(is_win, rank_log_id)
+
+        map_total_aggregation = self.per_map_totals.setdefault(map_id, AggregatedStats())
+        map_total_aggregation.register(is_win, rank_log_id)
+
+        self.overall.register(is_win, rank_log_id)
 
 
 def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
@@ -180,84 +223,49 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
 def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str, object]:
     """監視対象プレイヤーごとの統計情報を集計する."""
 
-    per_player_map_brawler: Dict[str, Dict[int, Dict[int, BattleStats]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(BattleStats))
-    )
-    per_player_map_totals: Dict[str, Dict[int, BattleStats]] = defaultdict(
-        lambda: defaultdict(BattleStats)
-    )
-    per_player_totals: Dict[str, BattleStats] = defaultdict(BattleStats)
-    per_player_map_brawler_rank_logs: Dict[str, Dict[int, Dict[int, set[str]]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(set))
-    )
-    per_player_map_rank_logs: Dict[str, Dict[int, set[str]]] = defaultdict(
-        lambda: defaultdict(set)
-    )
-    per_player_rank_logs: Dict[str, set[str]] = defaultdict(set)
-
     monitored_players = dataset.players
+    per_player_aggregations: Dict[str, PlayerAggregation] = {}
 
     for record in dataset.battles:
         if record.player_tag not in monitored_players:
             continue
 
-        player_tag = record.player_tag
-        map_id = record.map_id
-        brawler_id = record.brawler_id
-
-        brawler_stats = per_player_map_brawler[player_tag][map_id][brawler_id]
-        brawler_stats.register_result(record.is_win)
-
-        per_player_map_totals[player_tag][map_id].register_result(record.is_win)
-        per_player_totals[player_tag].register_result(record.is_win)
-
-        rank_log_id = record.rank_log_id
-        per_player_map_brawler_rank_logs[player_tag][map_id][brawler_id].add(rank_log_id)
-        per_player_map_rank_logs[player_tag][map_id].add(rank_log_id)
-        per_player_rank_logs[player_tag].add(rank_log_id)
+        aggregation = per_player_aggregations.setdefault(
+            record.player_tag, PlayerAggregation()
+        )
+        aggregation.register_battle(
+            record.map_id, record.brawler_id, record.is_win, record.rank_log_id
+        )
 
     results: Dict[str, Dict[str, object]] = {}
 
     for player_tag, player in monitored_players.items():
-        map_brawlers = per_player_map_brawler.get(player_tag, {})
-        map_totals = per_player_map_totals.get(player_tag, {})
-        map_brawler_rank_logs = per_player_map_brawler_rank_logs.get(player_tag, {})
-        map_rank_logs = per_player_map_rank_logs.get(player_tag, {})
-        overall_rank_logs = per_player_rank_logs.get(player_tag, set())
+        aggregation = per_player_aggregations.get(player_tag)
 
         per_map_per_brawler: Dict[str, Dict[str, object]] = {}
-        per_map_loss_ranking: Dict[str, List[Dict[str, int]]] = {}
         per_map_overall: Dict[str, Dict[str, object]] = {}
 
-        for map_id, brawler_stats in map_brawlers.items():
-            map_key = str(map_id)
-            per_brawler: Dict[str, object] = {}
-            loss_ranking: List[Dict[str, int]] = []
-            rank_logs_by_brawler = map_brawler_rank_logs.get(map_id, {}) if map_brawler_rank_logs else {}
+        if aggregation:
+            for map_id, brawlers in aggregation.per_map_per_brawler.items():
+                per_map_per_brawler[str(map_id)] = {
+                    str(brawler_id): brawler_stats.to_dict()
+                    for brawler_id, brawler_stats in brawlers.items()
+                }
 
-            for brawler_id, stats in brawler_stats.items():
-                rank_log_ids = rank_logs_by_brawler.get(brawler_id, set())
-                per_brawler[str(brawler_id)] = stats.to_dict(len(rank_log_ids))
-                if stats.losses > 0:
-                    loss_ranking.append({"brawler_id": brawler_id, "losses": stats.losses})
+            for map_id, map_stats in aggregation.per_map_totals.items():
+                per_map_overall[str(map_id)] = map_stats.to_dict()
 
-            loss_ranking.sort(key=lambda item: (-item["losses"], item["brawler_id"]))
-            per_map_per_brawler[map_key] = per_brawler
-            per_map_loss_ranking[map_key] = loss_ranking
+            overall_dict = aggregation.overall.to_dict()
+        else:
+            overall_dict = BattleStats().to_dict(0)
 
-        for map_id, stats in map_totals.items():
-            rank_log_ids = map_rank_logs.get(map_id, set()) if map_rank_logs else set()
-            per_map_overall[str(map_id)] = stats.to_dict(len(rank_log_ids))
-
-        overall_stats = per_player_totals.get(player_tag, BattleStats())
         results[player_tag] = {
             "name": player.name,
             "highest_rank_id": player.highest_rank_id,
             "current_rank_id": player.current_rank_id,
             "per_map_per_brawler": per_map_per_brawler,
-            "per_map_loss_ranking": per_map_loss_ranking,
             "per_map_overall": per_map_overall,
-            "overall": overall_stats.to_dict(len(overall_rank_logs)),
+            "overall": overall_dict,
         }
 
     return {"players": results}
