@@ -34,6 +34,7 @@ class PlayerBattleRecord:
     """プレイヤー単位のバトル結果."""
 
     player_tag: str
+    battle_log_id: str
     rank_log_id: str
     map_id: int
     brawler_id: int
@@ -120,6 +121,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         )
         SELECT
             pb.player_tag,
+            pb.battle_log_id,
             bl.rank_log_id,
             rl.map_id,
             pb.brawler_id,
@@ -130,22 +132,47 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     """
 
     cursor.execute(query)
-    battles: List[PlayerBattleRecord] = []
-    fetched_rows = 0
-    for player_tag, rank_log_id, map_id, brawler_id, is_win in cursor.fetchall():
-        fetched_rows += 1
-        battles.append(
-            PlayerBattleRecord(
-                player_tag=str(player_tag),
-                rank_log_id=str(rank_log_id),
-                map_id=int(map_id),
-                brawler_id=int(brawler_id),
-                is_win=bool(is_win),
-            )
-        )
+    raw_rows = cursor.fetchall()
     cursor.close()
 
-    logger.info("監視対象プレイヤーのバトル件数: %d", fetched_rows)
+    deduped_battles: Dict[tuple[str, str], PlayerBattleRecord] = {}
+    duplicate_count = 0
+
+    for player_tag, battle_log_id, rank_log_id, map_id, brawler_id, is_win in raw_rows:
+        record = PlayerBattleRecord(
+            player_tag=str(player_tag),
+            battle_log_id=str(battle_log_id),
+            rank_log_id=str(rank_log_id),
+            map_id=int(map_id),
+            brawler_id=int(brawler_id),
+            is_win=bool(is_win),
+        )
+
+        key = (record.player_tag, record.battle_log_id)
+        existing = deduped_battles.get(key)
+        if existing is None:
+            deduped_battles[key] = record
+            continue
+
+        if (
+            existing.rank_log_id != record.rank_log_id
+            or existing.map_id != record.map_id
+            or existing.brawler_id != record.brawler_id
+            or existing.is_win != record.is_win
+        ):
+            logger.warning(
+                "同一バトルに複数の不整合レコードが存在します: player=%s, battle=%s",
+                record.player_tag,
+                record.battle_log_id,
+            )
+        duplicate_count += 1
+
+    battles = list(deduped_battles.values())
+
+    logger.info("監視対象プレイヤーのバトル件数(重複除外前): %d", len(raw_rows))
+    logger.info("重複除外済みバトル件数: %d", len(battles))
+    if duplicate_count:
+        logger.info("除外した重複バトル件数: %d", duplicate_count)
 
     return MonitoredPlayerDataset(players=players, battles=battles)
 
