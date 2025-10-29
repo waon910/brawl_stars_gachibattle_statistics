@@ -35,6 +35,7 @@ class PlayerBattleRecord:
     battle_log_id: str
     rank_log_id: str
     map_id: int
+    rank_id: int
     brawler_id: int
     is_win: bool
 
@@ -52,17 +53,21 @@ class BattleStats:
         else:
             self.losses += 1
 
-    def to_dict(self, rank_games: int | None = None) -> Dict[str, object]:
+    def to_dict(
+        self, rank_games: int | None = None, *, include_rank_games: bool = True
+    ) -> Dict[str, object]:
         games = self.wins + self.losses
-        rank_games_value = rank_games if rank_games is not None else games
         win_rate = round((self.wins / games) * 100, 2) if games else 0.0
-        return {
+        result: Dict[str, object] = {
             "wins": self.wins,
             "losses": self.losses,
             "games": games,
-            "rank_games": rank_games_value,
             "win_rate": win_rate,
         }
+        if include_rank_games:
+            rank_games_value = rank_games if rank_games is not None else games
+            result["rank_games"] = rank_games_value
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,20 +98,51 @@ class AggregatedStats:
 
 
 @dataclass(slots=True)
+class PlayerMatchRounds:
+    """ランクログ（マッチ）単位でのラウンド結果."""
+
+    map_id: int
+    rank_id: int
+    wins: int = 0
+    losses: int = 0
+
+    def register_round(self, is_win: bool) -> None:
+        if is_win:
+            self.wins += 1
+        else:
+            self.losses += 1
+
+    def determine_match_outcome(self) -> bool | None:
+        required_wins = 1 if self.rank_id <= 4 else 2
+        if self.wins >= required_wins and self.wins > self.losses:
+            return True
+        if self.losses >= required_wins and self.losses > self.wins:
+            return False
+        return None
+
+
+@dataclass(slots=True)
 class PlayerAggregation:
     """監視対象プレイヤー単位の集計データ."""
 
     per_map_per_brawler: Dict[int, Dict[int, AggregatedStats]]
     per_map_totals: Dict[int, AggregatedStats]
     overall: AggregatedStats
+    match_rounds: Dict[str, PlayerMatchRounds]
 
     def __init__(self) -> None:
         self.per_map_per_brawler = {}
         self.per_map_totals = {}
         self.overall = AggregatedStats()
+        self.match_rounds = {}
 
     def register_battle(
-        self, map_id: int, brawler_id: int, is_win: bool, rank_log_id: str
+        self,
+        map_id: int,
+        rank_id: int,
+        brawler_id: int,
+        is_win: bool,
+        rank_log_id: str,
     ) -> None:
         map_brawlers = self.per_map_per_brawler.setdefault(map_id, {})
         brawler_aggregation = map_brawlers.setdefault(brawler_id, AggregatedStats())
@@ -116,6 +152,53 @@ class PlayerAggregation:
         map_total_aggregation.register(is_win, rank_log_id)
 
         self.overall.register(is_win, rank_log_id)
+
+        match = self.match_rounds.get(rank_log_id)
+        if match is None:
+            self.match_rounds[rank_log_id] = PlayerMatchRounds(
+                map_id=map_id, rank_id=rank_id
+            )
+            match = self.match_rounds[rank_log_id]
+        else:
+            if match.map_id != map_id:
+                logger.warning(
+                    "rank_log_id=%s に複数のマップIDが紐づいています: %s -> %s",
+                    rank_log_id,
+                    match.map_id,
+                    map_id,
+                )
+            if match.rank_id != rank_id:
+                logger.warning(
+                    "rank_log_id=%s に複数のランクIDが紐づいています: %s -> %s",
+                    rank_log_id,
+                    match.rank_id,
+                    rank_id,
+                )
+
+        match.register_round(is_win)
+
+    def compute_match_stats(self) -> tuple[Dict[int, BattleStats], BattleStats]:
+        per_map_rank_stats: Dict[int, BattleStats] = {}
+        overall_rank_stats = BattleStats()
+
+        for rank_log_id, match in self.match_rounds.items():
+            outcome = match.determine_match_outcome()
+            if outcome is None:
+                logger.warning(
+                    "マッチ結果を判定できませんでした: rank_log_id=%s, map_id=%s, rank_id=%s, wins=%s, losses=%s",
+                    rank_log_id,
+                    match.map_id,
+                    match.rank_id,
+                    match.wins,
+                    match.losses,
+                )
+                continue
+
+            per_map_stats = per_map_rank_stats.setdefault(match.map_id, BattleStats())
+            per_map_stats.register_result(outcome)
+            overall_rank_stats.register_result(outcome)
+
+        return per_map_rank_stats, overall_rank_stats
 
 
 def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
@@ -167,6 +250,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
             pb.battle_log_id,
             bl.rank_log_id,
             rl.map_id,
+            rl.rank_id,
             pb.brawler_id,
             pb.is_win
         FROM player_battles pb
@@ -181,12 +265,21 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     deduped_battles: Dict[tuple[str, str], PlayerBattleRecord] = {}
     duplicate_count = 0
 
-    for player_tag, battle_log_id, rank_log_id, map_id, brawler_id, is_win in raw_rows:
+    for (
+        player_tag,
+        battle_log_id,
+        rank_log_id,
+        map_id,
+        rank_id,
+        brawler_id,
+        is_win,
+    ) in raw_rows:
         record = PlayerBattleRecord(
             player_tag=str(player_tag),
             battle_log_id=str(battle_log_id),
             rank_log_id=str(rank_log_id),
             map_id=int(map_id),
+            rank_id=int(rank_id),
             brawler_id=int(brawler_id),
             is_win=bool(is_win),
         )
@@ -200,6 +293,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         if (
             existing.rank_log_id != record.rank_log_id
             or existing.map_id != record.map_id
+            or existing.rank_id != record.rank_id
             or existing.brawler_id != record.brawler_id
             or existing.is_win != record.is_win
         ):
@@ -234,7 +328,11 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             record.player_tag, PlayerAggregation()
         )
         aggregation.register_battle(
-            record.map_id, record.brawler_id, record.is_win, record.rank_log_id
+            record.map_id,
+            record.rank_id,
+            record.brawler_id,
+            record.is_win,
+            record.rank_log_id,
         )
 
     results: Dict[str, Dict[str, object]] = {}
@@ -252,12 +350,30 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
                     for brawler_id, brawler_stats in brawlers.items()
                 }
 
-            for map_id, map_stats in aggregation.per_map_totals.items():
-                per_map_overall[str(map_id)] = map_stats.to_dict()
+            per_map_rank_stats, overall_rank_stats = aggregation.compute_match_stats()
+            map_ids = set(aggregation.per_map_totals.keys()) | set(per_map_rank_stats.keys())
 
-            overall_dict = aggregation.overall.to_dict()
+            for map_id in map_ids:
+                map_stats = aggregation.per_map_totals.get(map_id)
+                battle_dict = (
+                    map_stats.to_dict() if map_stats else BattleStats().to_dict(rank_games=0)
+                )
+                rank_stats = per_map_rank_stats.get(map_id, BattleStats())
+                per_map_overall[str(map_id)] = {
+                    "battle": battle_dict,
+                    "rank": rank_stats.to_dict(include_rank_games=False),
+                }
+
+            overall_dict = {
+                "battle": aggregation.overall.to_dict(),
+                "rank": overall_rank_stats.to_dict(include_rank_games=False),
+            }
         else:
-            overall_dict = BattleStats().to_dict(0)
+            zero_battle_stats = BattleStats()
+            overall_dict = {
+                "battle": zero_battle_stats.to_dict(rank_games=0),
+                "rank": zero_battle_stats.to_dict(include_rank_games=False),
+            }
 
         results[player_tag] = {
             "name": player.name,
