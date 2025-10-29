@@ -102,7 +102,7 @@ python -m src.export_3v3_win_rates --output-dir three_vs_three_output
 python -m src.export_monitored_player_stats --output monitored_player_stats.json
 ```
 
-監視対象に設定されているプレイヤーの勝敗・スター獲得数をマップ別/キャラクター別に集計します。監視対象が存在しない場合は空データを出力します。
+監視対象に設定されているプレイヤーの勝敗をマップ別/キャラクター別に集計します。監視対象が存在しない場合は空データを出力します。
 
 ### ランクマッチ数とスター取得率
 
