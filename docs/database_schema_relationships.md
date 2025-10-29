@@ -22,7 +22,7 @@
 | `_brawlers` | ブロウラー（キャラクター）のマスターデータ | `id`, `name_ja` | `win_lose_logs`, `rank_star_logs` などブロウラー ID を必要とするテーブルから参照。 |
 | `rank_logs` | 1 マッチ単位のランク戦ログ | `id`, `map_id`, `rank_id` | `_maps`・`_ranks` とリレーション。`battle_logs`・`rank_star_logs` の親。 |
 | `rank_star_logs` | マッチのスタープレイヤー情報 | `rank_log_id`, `star_brawler_id`, `star_player_tag` | `rank_logs` と 1 対 1。スタープレイヤーのブロウラー・タグを記録。 |
-| `battle_logs` | API で取得した個別バトルログ（マッチ内部の戦闘） | `id`, `rank_log_id` | 各ラウンドやリマッチを同一 `rank_log_id` に束ねる。`win_lose_logs` の親。 |
+| `battle_logs` | API で取得した個別バトルログ（マッチ内部の戦闘） | `id`, `rank_log_id` | 各ラウンドやリマッチを同一 `rank_log_id` に束ね、1 マッチ（`rank_logs`）につき 1～3 行が格納される。`win_lose_logs` の親。 |
 | `win_lose_logs` | 勝敗と使用ブロウラーの組み合わせ | `win_brawler_id`, `lose_brawler_id`, `battle_log_id`, `win_player_tag`, `lose_player_tag` | 1 バトルの勝者・敗者のブロウラー組み合わせを格納。`battle_logs` と多対 1。勝利チーム 3 名 × 敗北チーム 3 名 = 9 行が基本。 |
 
 ## リレーション概要（Mermaid ER 図）
@@ -37,7 +37,7 @@ erDiagram
     _brawlers ||--o{ win_lose_logs : "使用ブロウラー"
     _brawlers ||--o{ rank_star_logs : "スター取得ブロウラー"
     rank_logs ||--o| rank_star_logs : "各マッチに 0..1"
-    rank_logs ||--o{ battle_logs : "マッチに紐づくバトル"
+    rank_logs ||--o{ battle_logs : "各マッチに 1..3"
     battle_logs ||--o{ win_lose_logs : "バトル単位の勝敗"    
 ```
 
