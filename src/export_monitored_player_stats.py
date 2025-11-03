@@ -6,13 +6,15 @@ import argparse
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Mapping
+from typing import Dict, Iterable, List, Mapping
 
 import mysql.connector
 
 from .db import get_connection
 from .logging_config import setup_logging
+from .postgres_login_history import fetch_login_history_tags
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,102 @@ class MonitoredPlayerDataset:
 
     players: Mapping[str, MonitoredPlayer]
     battles: List[PlayerBattleRecord]
+
+
+def _normalize_tag(tag: str) -> str:
+    normalized = tag.strip().upper()
+    if not normalized:
+        raise ValueError("プレイヤータグが空です。")
+    if not normalized.startswith("#"):
+        normalized = "#" + normalized
+    return normalized
+
+
+def _normalize_tags(tags: Iterable[str]) -> list[str]:
+    normalized_tags: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in tags:
+        try:
+            tag = _normalize_tag(raw_tag)
+        except ValueError:
+            logger.warning("無効なタグを検出したためスキップします: %r", raw_tag)
+            continue
+        if tag not in seen:
+            seen.add(tag)
+            normalized_tags.append(tag)
+    return normalized_tags
+
+
+def synchronize_monitored_players_from_login_history(conn) -> None:
+    """PostgreSQL のログイン履歴から取得したタグを監視対象に反映する."""
+
+    try:
+        login_history_tags = fetch_login_history_tags()
+    except Exception as exc:  # pragma: no cover - 外部接続エラーはモックが困難
+        logger.warning(
+            "PostgreSQL からログイン履歴のタグ一覧を取得できなかったため同期をスキップします: %s",
+            exc,
+        )
+        return
+
+    normalized_tags = _normalize_tags(login_history_tags)
+    if not normalized_tags:
+        logger.info("PostgreSQL のログイン履歴に同期対象となるタグは存在しませんでした。")
+        return
+
+    cursor = conn.cursor()
+    try:
+        placeholders = ",".join(["%s"] * len(normalized_tags))
+        cursor.execute(
+            f"""
+            SELECT tag, COALESCE(is_monitored, 0)
+            FROM players
+            WHERE tag IN ({placeholders})
+            """,
+            normalized_tags,
+        )
+        rows = cursor.fetchall()
+
+        existing_tags: set[str] = set()
+        candidates: list[str] = []
+        for tag, is_monitored in rows:
+            tag_str = str(tag)
+            existing_tags.add(tag_str)
+            if not bool(is_monitored):
+                candidates.append(tag_str)
+
+        missing_tags = [tag for tag in normalized_tags if tag not in existing_tags]
+        if missing_tags:
+            logger.debug(
+                "PostgreSQL から取得したタグのうち players テーブルに存在しないものがあります: %s",
+                ", ".join(missing_tags),
+            )
+
+        if not candidates:
+            logger.info("PostgreSQL のログイン履歴に基づき新たに監視対象へ追加するプレイヤーはありませんでした。")
+            return
+
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        update_placeholders = ",".join(["%s"] * len(candidates))
+        cursor.execute(
+            f"""
+            UPDATE players
+            SET is_monitored = 1,
+                monitoring_started_at = CASE
+                    WHEN monitoring_started_at IS NULL THEN %s
+                    ELSE monitoring_started_at
+                END
+            WHERE tag IN ({update_placeholders})
+            """,
+            [now, *candidates],
+        )
+        logger.info(
+            "PostgreSQL のログイン履歴から %d 件のプレイヤーを監視対象に追加しました: %s",
+            cursor.rowcount,
+            ", ".join(sorted(candidates)),
+        )
+    finally:
+        cursor.close()
 
 
 @dataclass(slots=True)
@@ -415,6 +513,12 @@ def main() -> None:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
+        logger.info("PostgreSQL のログイン履歴から監視対象プレイヤーを自動同期します")
+        try:
+            synchronize_monitored_players_from_login_history(conn)
+        except mysql.connector.Error as exc:
+            raise SystemExit(f"監視対象プレイヤーの自動追加に失敗しました: {exc}")
+
         dataset = fetch_monitored_player_dataset(conn)
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
