@@ -46,7 +46,6 @@ next-env.d.ts
 /data/output/*
 !/data/output/.gitkeep
 __pycache__/
-.env*
 brawl_stats.db-wal
 brawl_stats.db-shm
 brawl_stats.db
@@ -54,12 +53,9 @@ Local MySQL.session.sql
 .vscode/
 
 venv/
-env/
 .venv/
-.env/
 
 .brawl_stars_pipeline.pid
 brawl_stats.db
-venv/
 *.db
 *.pyc
