@@ -11,7 +11,11 @@ from typing import List
 
 import psycopg
 
-from .settings import load_environment
+try:
+    # Allow using the module as part of a package (relative import) and as a standalone script (absolute import).
+    from .settings import load_environment
+except ImportError:
+    from settings import load_environment
 
 
 def _get_database_url() -> str:
