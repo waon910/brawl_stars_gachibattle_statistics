@@ -412,6 +412,17 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     return MonitoredPlayerDataset(players=players, battles=battles)
 
 
+def synchronize_and_fetch_monitored_player_dataset(
+    conn,
+) -> MonitoredPlayerDataset:
+    """PostgreSQL 同期後に監視対象プレイヤーのデータセットを取得する."""
+
+    logger.info("PostgreSQL のログイン履歴から監視対象プレイヤーを自動同期します")
+    synchronize_monitored_players_from_login_history(conn)
+    logger.info("監視対象プレイヤーのデータセットを全期間から取得しています...")
+    return fetch_monitored_player_dataset(conn)
+
+
 def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str, object]:
     """監視対象プレイヤーごとの統計情報を集計する."""
 
@@ -513,13 +524,10 @@ def main() -> None:
         raise SystemExit(f"データベースに接続できません: {exc}")
 
     try:
-        logger.info("PostgreSQL のログイン履歴から監視対象プレイヤーを自動同期します")
         try:
-            synchronize_monitored_players_from_login_history(conn)
+            dataset = synchronize_and_fetch_monitored_player_dataset(conn)
         except mysql.connector.Error as exc:
             raise SystemExit(f"監視対象プレイヤーの自動追加に失敗しました: {exc}")
-
-        dataset = fetch_monitored_player_dataset(conn)
     except mysql.connector.Error as exc:
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:

@@ -26,7 +26,7 @@ from .export_pair_stats import (
 from .export_monitored_player_stats import (
     MonitoredPlayerDataset,
     export_monitored_player_stats,
-    fetch_monitored_player_dataset,
+    synchronize_and_fetch_monitored_player_dataset,
 )
 from .export_star_rates import compute_star_rates, fetch_star_rows
 from .export_trio_stats import export_trio_json
@@ -193,8 +193,7 @@ def main() -> None:
         dataset = load_recent_ranked_battles(conn, since)
         logger.info("ランクマッチ数を取得しています...")
         rank_match_counts = fetch_rank_match_counts(conn)
-        logger.info("監視対象プレイヤーのデータセットを全期間から取得しています...")
-        monitored_dataset = fetch_monitored_player_dataset(conn)
+        monitored_dataset = synchronize_and_fetch_monitored_player_dataset(conn)
     except mysql.connector.Error as exc:  # pragma: no cover - クエリエラー
         raise SystemExit(f"クエリの実行に失敗しました: {exc}")
     finally:
