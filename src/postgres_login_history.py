@@ -6,16 +6,73 @@
 
 from __future__ import annotations
 
+import logging
 import os
-from typing import List
+from typing import Any, List
 
-import psycopg
+try:  # pragma: no cover - 環境依存のためテストが困難
+    import psycopg  # type: ignore[import]
+except Exception as exc:  # pragma: no cover - psycopg の import 失敗時
+    psycopg = None  # type: ignore[assignment]
+    _PSYCOPG_IMPORT_ERROR = exc
+else:  # pragma: no cover - import 成功時
+    _PSYCOPG_IMPORT_ERROR = None
 
 try:
     # Allow using the module as part of a package (relative import) and as a standalone script (absolute import).
     from .settings import load_environment
 except ImportError:
     from settings import load_environment
+
+
+logger = logging.getLogger(__name__)
+
+
+def _describe_psycopg_import_issue(exc: BaseException | None) -> str:
+    """psycopg の import 失敗理由を利用者向けに整形する。"""
+
+    guidance = [
+        "psycopg が利用できません。libpq をシステムにインストールするか、",
+        "pip install \"psycopg[binary]\" を実行してバイナリディストリビューションを導入してください。",
+    ]
+
+    if exc is None:
+        return "".join(guidance)
+
+    message = str(exc)
+    lowered = message.lower()
+
+    if "libpq" in lowered or "pq wrapper" in lowered:
+        guidance.insert(
+            0,
+            "libpq の共有ライブラリが見つからないため psycopg の初期化に失敗しました。",
+        )
+    else:
+        guidance.insert(
+            0,
+            "psycopg の読み込み時に予期しない例外が発生しました。",
+        )
+
+    guidance.append(f" 原因となった例外メッセージ: {message}")
+    return "".join(guidance)
+
+
+def _ensure_psycopg_available() -> Any:
+    """psycopg の import 状態を検証し、利用できない場合は詳細なメッセージ付きで失敗させる。"""
+
+    if psycopg is None:
+        if _PSYCOPG_IMPORT_ERROR is not None:
+            logger.debug(
+                "psycopg の import 時に例外が発生しました", exc_info=_PSYCOPG_IMPORT_ERROR
+            )
+        message = _describe_psycopg_import_issue(_PSYCOPG_IMPORT_ERROR)
+        logger.debug(
+            "psycopg の import 失敗時環境: LD_LIBRARY_PATH=%s, DYLD_LIBRARY_PATH=%s",
+            os.getenv("LD_LIBRARY_PATH"),
+            os.getenv("DYLD_LIBRARY_PATH"),
+        )
+        raise RuntimeError(message) from _PSYCOPG_IMPORT_ERROR
+    return psycopg
 
 
 def _get_database_url() -> str:
@@ -47,10 +104,15 @@ def fetch_login_history_tags() -> List[str]:
     database_url = _get_database_url()
     query = "SELECT tag FROM login_histories ORDER BY tag ASC"
 
-    with psycopg.connect(database_url) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            rows = cursor.fetchall()
+    psycopg_module = _ensure_psycopg_available()
+
+    try:
+        with psycopg_module.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
+    except Exception as exc:
+        raise RuntimeError("PostgreSQL から login_histories テーブルの取得に失敗しました。") from exc
 
     return [row[0] for row in rows if row[0] is not None]
 
