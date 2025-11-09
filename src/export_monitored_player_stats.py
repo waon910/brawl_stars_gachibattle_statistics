@@ -422,7 +422,6 @@ def synchronize_and_fetch_monitored_player_dataset(
     """PostgreSQL 同期後に監視対象プレイヤーとランク22プレイヤーのデータセットを取得する."""
 
     logger.info("PostgreSQL のログイン履歴から監視対象プレイヤーを自動同期します")
-    _monitor_rank22_players(conn)
     synchronize_monitored_players_from_login_history(conn)
     logger.info("監視対象プレイヤーのデータセットを全期間から取得しています...")
     return fetch_monitored_player_dataset(conn)
