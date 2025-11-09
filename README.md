@@ -56,7 +56,7 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 1. `.env.local` を含む各種設定ファイルを読み込み、保持期間や並列実行数を決定。
 2. 多重起動を防ぐ PID ファイルを作成し、ログディレクトリを初期化。
 3. `python -m src.fetch_battlelog` を呼び出して Brawl Stars API から最新のバトルログを収集し、不要な古いレコードを削除。
-4. `python -m src.export_all_stats` を実行し、勝率 (`win_rates.json`)、スター取得率 (`star_rates.json`)、対キャラ/味方相性 (`pair_stats/`)、トリオ統計 (`trio_stats/`)、3 対 3 構成 (`three_vs_three_stats/`)、監視対象プレイヤー統計 (`monitored_player_stats.json`)、ランクマッチ数 (`rank_match_counts.json`) を生成。
+4. `python -m src.export_all_stats` を実行し、勝率 (`win_rates.json`)、スター取得率 (`star_rates.json`)、対キャラ/味方相性 (`pair_stats/`)、トリオ統計 (`trio_stats/`)、3 対 3 構成 (`three_vs_three_stats/`)、監視対象プレイヤー統計 (`monitored_player_stats.json`)、ランクマッチ数 (`rank_match_counts.json`) を生成。監視対象プレイヤー統計では `is_monitored = 1` の対象と現在のランクが22のプレイヤーを両方含めるため、最新のランク22プレイヤーも出力されます。
 5. 生成された JSON/ディレクトリを外部アプリケーション用パスへコピーし、必要であれば Git へのコミット・プッシュを実行。
 6. 実行終了時に総処理時間をログ出力し、PID ファイルを削除。
 
@@ -115,7 +115,7 @@ python -m src.export_star_rates --output star_rates.json
 
 ## 監視対象プレイヤー管理 CLI (`scripts/player_monitoring.py`)
 
-監視対象に設定されたプレイヤーは `src.fetch_battlelog` が優先的にバトルログを取得し、`export_monitored_player_stats.py` が専用の統計を出力します。CLI を使う前に、`players` テーブルに対象タグが存在している必要があります（バトルログを一度取得すると自動で登録されます）。
+監視対象に設定されたプレイヤーは `src.fetch_battlelog` が優先的にバトルログを取得し、`export_monitored_player_stats.py` が専用の統計を出力します。`src.export_monitored_player_stats` は監視対象に加えて現在のランクが22のプレイヤーも統計対象に含め、両者が重複するプレイヤーは1件として集計されるので、ランク22プレイヤーを CLI で追加しなくても最新のデータを追跡できます。CLI を使う前に `players` テーブルに対象タグが存在している必要があります（バトルログを一度取得すると自動で登録されます）。
 
 ### 事前準備
 
@@ -133,6 +133,9 @@ python scripts/player_monitoring.py unmonitor #ABCDEFG
 
 # 監視対象の一覧を表示
 python scripts/player_monitoring.py list
+
+# 現在のランク22プレイヤーを監視対象へ
+python scripts/player_monitoring.py monitor-rank22
 ```
 
 主な挙動:
@@ -142,6 +145,7 @@ python scripts/player_monitoring.py list
 - `monitor` コマンドは対象プレイヤーの `is_monitored` フラグを `1` に設定し、初回設定時には `monitoring_started_at` に UTC 現在時刻を記録します。
 - `unmonitor` コマンドはフラグを `0` に戻し、`monitoring_started_at` を `NULL` に戻します。
 - `list` コマンドは監視対象プレイヤーを監視開始日時順に表示します。対象が存在しない場合はメッセージを出力して終了します。
+- `monitor-rank22` コマンドは `current_rank = 22` かつ `is_monitored = 0` のプレイヤーを一括で監視対象に設定します。
 - 各コマンドは処理件数を標準出力へ表示し、未入力や存在しないタグのみの場合は終了コード `1` で終了します。
 
 ## ログ設定

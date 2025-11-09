@@ -74,7 +74,7 @@ class BattleStats:
 
 @dataclass(frozen=True, slots=True)
 class MonitoredPlayerDataset:
-    """監視対象プレイヤーの統計計算用データセット."""
+    """監視対象プレイヤーとランク22プレイヤーの統計計算用データセット."""
 
     players: Mapping[str, MonitoredPlayer]
     battles: List[PlayerBattleRecord]
@@ -300,11 +300,15 @@ class PlayerAggregation:
 
 
 def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
-    """監視対象プレイヤーのバトル情報を全件読み込む."""
+    """監視対象プレイヤーとランク22プレイヤーのバトル情報を全件読み込む."""
 
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT tag, name, highest_rank, current_rank FROM players WHERE is_monitored = 1"
+        """
+        SELECT tag, name, highest_rank, current_rank
+        FROM players
+        WHERE is_monitored = 1 OR current_rank = 22
+        """
     )
     players: Dict[str, MonitoredPlayer] = {}
     for tag, name, highest_rank, current_rank in cursor.fetchall():
@@ -320,11 +324,11 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
         logger.info("監視対象プレイヤーが存在しないため、統計処理をスキップします")
         return MonitoredPlayerDataset(players={}, battles=[])
 
-    logger.info("監視対象プレイヤー数: %d", len(players))
+    logger.info("監視対象プレイヤー/ランク22プレイヤー数: %d", len(players))
 
     query = """
-        WITH monitored_players AS (
-            SELECT tag FROM players WHERE is_monitored = 1
+        WITH tracked_players AS (
+            SELECT tag FROM players WHERE is_monitored = 1 OR current_rank = 22
         ),
         player_battles AS (
             SELECT
@@ -333,7 +337,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
                 wll.win_brawler_id AS brawler_id,
                 1 AS is_win
             FROM win_lose_logs wll
-            JOIN monitored_players mp ON mp.tag = wll.win_player_tag
+            JOIN tracked_players tp ON tp.tag = wll.win_player_tag
             UNION ALL
             SELECT
                 wll.lose_player_tag AS player_tag,
@@ -341,7 +345,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
                 wll.lose_brawler_id AS brawler_id,
                 0 AS is_win
             FROM win_lose_logs wll
-            JOIN monitored_players mp ON mp.tag = wll.lose_player_tag
+            JOIN tracked_players tp ON tp.tag = wll.lose_player_tag
         )
         SELECT
             pb.player_tag,
@@ -415,9 +419,10 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
 def synchronize_and_fetch_monitored_player_dataset(
     conn,
 ) -> MonitoredPlayerDataset:
-    """PostgreSQL 同期後に監視対象プレイヤーのデータセットを取得する."""
+    """PostgreSQL 同期後に監視対象プレイヤーとランク22プレイヤーのデータセットを取得する."""
 
     logger.info("PostgreSQL のログイン履歴から監視対象プレイヤーを自動同期します")
+    _monitor_rank22_players(conn)
     synchronize_monitored_players_from_login_history(conn)
     logger.info("監視対象プレイヤーのデータセットを全期間から取得しています...")
     return fetch_monitored_player_dataset(conn)

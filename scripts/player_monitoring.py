@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import argparse
 import os
+<<<<<<< ours
+
+=======
+>>>>>>> theirs
 import sys
 from datetime import datetime
 from typing import Iterable, Sequence
@@ -157,6 +161,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="監視対象のプレイヤーを一覧表示します。",
     )
 
+<<<<<<< ours
+=======
+    subparsers.add_parser(
+        "monitor-rank22",
+        help="現在のランク22のプレイヤーをすべて監視対象に設定します。",
+    )
+
+>>>>>>> theirs
     return parser
 
 
@@ -168,6 +180,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _monitor_players(args.tags)
     if args.command == "unmonitor":
         return _unmonitor_players(args.tags)
+<<<<<<< ours
+=======
+    if args.command == "monitor-rank22":
+        return _monitor_rank22_players()
+>>>>>>> theirs
     if args.command == "list":
         return _list_monitored_players()
     parser.error("不明なコマンドです。")
