@@ -35,6 +35,8 @@ FETCH_BATCH_SIZE = 10
 MAX_WORKERS = 10
 # API リクエストのタイムアウト (接続タイムアウト, 読み取りタイムアウト)
 REQUEST_TIMEOUT = (5, 30)
+# 一度の削除で扱うランクログIDの上限
+DELETE_CHUNK_SIZE = 1000
 
 
 def _create_http_session() -> requests.Session:
@@ -212,21 +214,25 @@ def cleanup_old_logs(conn) -> int:
     old_rank_ids = [row[0] for row in cur.fetchall()]
     if not old_rank_ids:
         return 0
-    placeholders = ",".join("%s" for _ in old_rank_ids)
-    cur.execute(
-        f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
-        old_rank_ids,
-    )
-    cur.execute(
-        f"DELETE FROM battle_logs WHERE rank_log_id IN ({placeholders})",
-        old_rank_ids,
-    )
-    cur.execute(
-        f"DELETE FROM rank_logs WHERE id IN ({placeholders})",
-        old_rank_ids,
-    )
+    deleted = 0
+    for start in range(0, len(old_rank_ids), DELETE_CHUNK_SIZE):
+        chunk = old_rank_ids[start : start + DELETE_CHUNK_SIZE]
+        placeholders = ",".join("%s" for _ in chunk)
+        cur.execute(
+            f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
+            chunk,
+        )
+        cur.execute(
+            f"DELETE FROM battle_logs WHERE rank_log_id IN ({placeholders})",
+            chunk,
+        )
+        cur.execute(
+            f"DELETE FROM rank_logs WHERE id IN ({placeholders})",
+            chunk,
+        )
+        deleted += len(chunk)
     conn.commit()
-    return len(old_rank_ids)
+    return deleted
 
 def fetch_rank_player(api_key: str, conn) -> int:
     """ランク上位プレイヤーを取得してDBへ保存"""
