@@ -129,6 +129,8 @@ REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000548, 'Out In The Ope
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000703, 'New Horizon', '新たなる地平', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000502, 'Flowing Springs', '淀みなき泉', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000367, 'Goldarm Gulch', 'ゴールドアームの渓谷', 17);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000350, 'Quick Travel', '', 17);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000289, 'Massive Attack', 'm', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000005, 'Shooting Star', '流れ星', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000022, 'Hideout', '隠れ家', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000082, 'Layer Cake', 'ミルフィーユ', 1);

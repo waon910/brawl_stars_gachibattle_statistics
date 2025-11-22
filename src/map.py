@@ -34,5 +34,7 @@ MAP_NAME_TO_ID: dict[str, int] = {
     "Infinite Doom": 15000617,
     "Grass Knot": 15001020,
     "Spiraling Out": 15001021,
+    "Quick Travel": 15000350,
+    "Massive Attack": 15000289,
 
 }
