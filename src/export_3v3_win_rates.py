@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import shutil
+import math
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 
 logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
+MIN_BETA_SHAPE = 1e-6
 
 MatchupRow = Tuple[int, int, int, int, int, int, int, float]
 
@@ -28,7 +30,9 @@ MatchupRow = Tuple[int, int, int, int, int, int, int, float]
 def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界を計算する."""
 
-    return float(beta.ppf(1 - confidence, alpha, beta_param))
+    alpha_safe = max(alpha, MIN_BETA_SHAPE)
+    beta_safe = max(beta_param, MIN_BETA_SHAPE)
+    return float(beta.ppf(1 - confidence, alpha_safe, beta_safe))
 
 
 def fetch_matchup_rows(dataset: StatsDataset) -> List[MatchupRow]:
@@ -110,6 +114,8 @@ def compute_matchup_scores(
             alpha_post = alpha_prior + wins_val
             beta_post = beta_prior + losses_val
             lcb = beta_lcb(alpha_post, beta_post, confidence)
+            if not math.isfinite(lcb):
+                continue
             record = {
                 "win_brawlers": list(win_team),
                 "lose_brawlers": list(lose_team),
@@ -193,4 +199,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

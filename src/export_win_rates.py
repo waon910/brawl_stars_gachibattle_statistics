@@ -8,6 +8,7 @@
 import argparse
 import json
 import logging
+import math
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
@@ -21,11 +22,14 @@ from .stats_loader import StatsDataset, load_recent_ranked_battles
 from .settings import CONFIDENCE_LEVEL, DATA_RETENTION_DAYS
 
 logger = logging.getLogger(__name__)
+MIN_BETA_SHAPE = 1e-6
 
 
 def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布の下側信頼限界を求める"""
-    return float(beta.ppf(1 - confidence, alpha, beta_param))
+    alpha_safe = max(alpha, MIN_BETA_SHAPE)
+    beta_safe = max(beta_param, MIN_BETA_SHAPE)
+    return float(beta.ppf(1 - confidence, alpha_safe, beta_safe))
 
 
 def fetch_stats(dataset: StatsDataset) -> List[tuple]:
@@ -85,6 +89,8 @@ def compute_win_rates(
             alpha_post = alpha_prior + val["wins"]
             beta_post = beta_prior + val["games"] - val["wins"]
             lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
+            if not math.isfinite(lcb):
+                continue
             map_result[brawler_id] = {
                 "games": int(round(val["games"])),
                 "win_rate_lcb": lcb,

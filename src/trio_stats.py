@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import math
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from scipy.stats import beta
@@ -10,11 +11,14 @@ from .settings import CONFIDENCE_LEVEL, MIN_RANK_ID
 from .stats_loader import StatsDataset
 
 TrioRow = Tuple[int, int, int, int, int, int, float, float]
+MIN_BETA_SHAPE = 1e-6
 
 
 def beta_lcb(alpha: float, beta_param: float, confidence: float = CONFIDENCE_LEVEL) -> float:
     """Beta分布に基づく下側信頼限界を計算する."""
-    return float(beta.ppf(1 - confidence, alpha, beta_param))
+    alpha_safe = max(alpha, MIN_BETA_SHAPE)
+    beta_safe = max(beta_param, MIN_BETA_SHAPE)
+    return float(beta.ppf(1 - confidence, alpha_safe, beta_safe))
 
 
 def fetch_trio_rows(
@@ -257,6 +261,8 @@ def compute_trio_scores(
                 alpha_post = alpha_prior + wins_val
                 beta_post = beta_prior + losses_val
                 lcb = beta_lcb(alpha_post, beta_post, confidence=confidence)
+                if not math.isfinite(lcb):
+                    continue
                 record = {
                     "brawlers": list(trio),
                     "wins": int(round(wins_val)),
