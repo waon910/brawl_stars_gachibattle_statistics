@@ -203,10 +203,15 @@ def cleanup_old_logs(conn) -> int:
               SELECT 1
               FROM battle_logs bl
               JOIN win_lose_logs wll ON wll.battle_log_id = bl.id
-              LEFT JOIN players wp ON wp.tag = wll.win_player_tag AND wp.is_monitored = 1
-              LEFT JOIN players lp ON lp.tag = wll.lose_player_tag AND lp.is_monitored = 1
+              LEFT JOIN players wp ON wp.tag = wll.win_player_tag
+              LEFT JOIN players lp ON lp.tag = wll.lose_player_tag
               WHERE bl.rank_log_id = rl.id
-                AND (wp.tag IS NOT NULL OR lp.tag IS NOT NULL)
+                AND (
+                    wp.is_monitored = 1
+                    OR lp.is_monitored = 1
+                    OR wp.highest_rank = 22
+                    OR lp.highest_rank = 22
+                )
           )
         """,
         (threshold,),
