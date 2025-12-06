@@ -17,6 +17,8 @@ from .logging_config import setup_logging
 from .postgres_login_history import fetch_login_history_tags
 
 logger = logging.getLogger(__name__)
+DEFAULT_VISIBILITY = "none"
+VALID_VISIBILITY = {"public", "private", "none"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +27,7 @@ class MonitoredPlayer:
 
     tag: str
     name: str | None
+    visibility: str | None
     highest_rank_id: int | None
     current_rank_id: int | None
 
@@ -159,6 +162,10 @@ def synchronize_monitored_players_from_login_history(conn) -> None:
             f"""
             UPDATE players
             SET is_monitored = 1,
+                visibility = CASE
+                    WHEN visibility = 'public' THEN visibility
+                    ELSE 'private'
+                END,
                 monitoring_started_at = CASE
                     WHEN monitoring_started_at IS NULL THEN %s
                     ELSE monitoring_started_at
@@ -305,16 +312,25 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT tag, name, highest_rank, current_rank
+        SELECT tag, name, visibility, highest_rank, current_rank
         FROM players
         WHERE is_monitored = 1 OR current_rank = 22
         """
     )
     players: Dict[str, MonitoredPlayer] = {}
-    for tag, name, highest_rank, current_rank in cursor.fetchall():
+    for tag, name, visibility, highest_rank, current_rank in cursor.fetchall():
+        visibility_value = str(visibility).lower() if visibility else None
+        if visibility_value and visibility_value not in VALID_VISIBILITY:
+            logger.warning(
+                "未知の可視性フラグを検出したためデフォルトにフォールバックします: tag=%s value=%s",
+                tag,
+                visibility_value,
+            )
+            visibility_value = None
         players[str(tag)] = MonitoredPlayer(
             tag=str(tag),
             name=str(name) if name else None,
+            visibility=visibility_value,
             highest_rank_id=int(highest_rank) if highest_rank is not None else None,
             current_rank_id=int(current_rank) if current_rank is not None else None,
         )
@@ -453,6 +469,10 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
     for player_tag, player in monitored_players.items():
         aggregation = per_player_aggregations.get(player_tag)
 
+        visibility = (player.visibility or DEFAULT_VISIBILITY).lower()
+        if visibility not in VALID_VISIBILITY:
+            visibility = DEFAULT_VISIBILITY
+
         per_map_per_brawler: Dict[str, Dict[str, object]] = {}
         per_map_overall: Dict[str, Dict[str, object]] = {}
 
@@ -490,6 +510,7 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
 
         results[player_tag] = {
             "name": player.name,
+            "visibility": visibility,
             "highest_rank_id": player.highest_rank_id,
             "current_rank_id": player.current_rank_id,
             "per_map_per_brawler": per_map_per_brawler,

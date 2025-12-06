@@ -5,4 +5,4 @@ SELECT
 FROM
     rank_logs AS rl
 WHERE
-    rl.id >= "20250805";
+    rl.id <= "20251114";

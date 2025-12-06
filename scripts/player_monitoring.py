@@ -68,6 +68,7 @@ def _monitor_players(tags: Sequence[str]) -> int:
             f"""
             UPDATE players
             SET is_monitored = 1,
+                visibility = 'public',
                 monitoring_started_at = CASE
                     WHEN monitoring_started_at IS NULL THEN %s
                     ELSE monitoring_started_at
@@ -98,6 +99,7 @@ def _unmonitor_players(tags: Sequence[str]) -> int:
             f"""
             UPDATE players
             SET is_monitored = 0,
+                visibility = 'none',
                 monitoring_started_at = NULL
             WHERE tag IN ({placeholders})
             """,

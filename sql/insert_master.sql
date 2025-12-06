@@ -95,6 +95,7 @@ REPLACE INTO _brawlers(id, name_ja) VALUES (16000095, 'アリー');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000096, 'トランク');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000097, 'ミナ');
 REPLACE INTO _brawlers(id, name_ja) VALUES (16000098, 'ジギー');
+REPLACE INTO _brawlers(id, name_ja) VALUES (16000100, 'ジジ');
 
 -- modes
 REPLACE INTO _modes(id, name, name_ja) VALUES (2, 'gemGrab', 'エメラルドハント');
@@ -131,6 +132,7 @@ REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000502, 'Flowing Spring
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000367, 'Goldarm Gulch', 'ゴールドアームの渓谷', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000350, 'Quick Travel', '', 17);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000289, 'Massive Attack', 'm', 17);
+REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15001023, 'In the Liminal', 'i', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000005, 'Shooting Star', '流れ星', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000022, 'Hideout', '隠れ家', 1);
 REPLACE INTO _maps(id, name, name_ja, mode_id) VALUES (15000082, 'Layer Cake', 'ミルフィーユ', 1);

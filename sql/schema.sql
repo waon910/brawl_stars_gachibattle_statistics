@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS players (
     current_rank INT NOT NULL DEFAULT 0,
     last_fetched DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
     is_monitored TINYINT(1) NOT NULL DEFAULT 0,
+    visibility ENUM('public', 'private', 'none') NOT NULL DEFAULT 'none',
     monitoring_started_at DATETIME NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -72,4 +73,3 @@ CREATE INDEX idx_win_lose_logs_battle_log_id ON win_lose_logs(battle_log_id);
 CREATE INDEX idx_win_player_tag ON win_lose_logs(win_player_tag);
 CREATE INDEX idx_lose_player_tag ON win_lose_logs(lose_player_tag);
 CREATE INDEX idx_players_monitoring_fetch ON players(is_monitored, last_fetched);
-
