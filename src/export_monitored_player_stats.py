@@ -19,6 +19,8 @@ from .postgres_login_history import fetch_login_history_tags
 logger = logging.getLogger(__name__)
 DEFAULT_VISIBILITY = "none"
 VALID_VISIBILITY = {"public", "private", "none"}
+PRO_RANK_ID = 22
+MIN_PRO_TOTAL_MATCHES = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +32,7 @@ class MonitoredPlayer:
     visibility: str | None
     highest_rank_id: int | None
     current_rank_id: int | None
+    is_monitored: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,13 +315,20 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT tag, name, visibility, highest_rank, current_rank
+        SELECT tag, name, visibility, highest_rank, current_rank, is_monitored
         FROM players
         WHERE is_monitored = 1 OR current_rank = 22
         """
     )
     players: Dict[str, MonitoredPlayer] = {}
-    for tag, name, visibility, highest_rank, current_rank in cursor.fetchall():
+    for (
+        tag,
+        name,
+        visibility,
+        highest_rank,
+        current_rank,
+        is_monitored,
+    ) in cursor.fetchall():
         visibility_value = str(visibility).lower() if visibility else None
         if visibility_value and visibility_value not in VALID_VISIBILITY:
             logger.warning(
@@ -333,6 +343,7 @@ def fetch_monitored_player_dataset(conn) -> MonitoredPlayerDataset:
             visibility=visibility_value,
             highest_rank_id=int(highest_rank) if highest_rank is not None else None,
             current_rank_id=int(current_rank) if current_rank is not None else None,
+            is_monitored=bool(is_monitored),
         )
 
     if not players:
@@ -448,6 +459,7 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
 
     monitored_players = dataset.players
     per_player_aggregations: Dict[str, PlayerAggregation] = {}
+    skipped_low_sample_pro_players = 0
 
     for record in dataset.battles:
         if record.player_tag not in monitored_players:
@@ -508,6 +520,16 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
                 "rank": zero_battle_stats.to_dict(include_rank_games=False),
             }
 
+        total_rank_games = int(overall_dict["battle"].get("rank_games", 0))
+        is_pro_player = player.current_rank_id == PRO_RANK_ID
+        if (
+            is_pro_player
+            and not player.is_monitored
+            and total_rank_games <= MIN_PRO_TOTAL_MATCHES
+        ):
+            skipped_low_sample_pro_players += 1
+            continue
+
         results[player_tag] = {
             "name": player.name,
             "visibility": visibility,
@@ -517,6 +539,13 @@ def compute_monitored_player_stats(dataset: MonitoredPlayerDataset) -> Dict[str,
             "per_map_overall": per_map_overall,
             "overall": overall_dict,
         }
+
+    if skipped_low_sample_pro_players:
+        logger.info(
+            "総試合数が %d 以下の監視対象外プロプレイヤー %d 名を出力から除外しました",
+            MIN_PRO_TOTAL_MATCHES,
+            skipped_low_sample_pro_players,
+        )
 
     return {"players": results}
 
