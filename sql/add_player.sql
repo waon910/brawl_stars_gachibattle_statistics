@@ -4,5 +4,9 @@
 -- INSERT INTO players(tag, name, highest_rank, current_rank, last_fetched)
 -- VALUES ("#8PQ0Y9Y0R", "かずまる🫧🌙", 21, 20, '2000-01-01 00:00:00');
 
-INSERT INTO players(tag, last_fetched) VALUES
-('#PGRG0Y2GU', '2000-01-01 00:00:00');
+-- INSERT INTO players(tag, last_fetched) VALUES
+-- ('#PGRG0Y2GU', '2000-01-01 00:00:00');
+
+UPDATE players
+SET name = 'guesti', highest_rank = 22, current_rank = 22
+WHERE tag = '#PLJP88C0Y';

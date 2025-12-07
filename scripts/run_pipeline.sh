@@ -215,11 +215,11 @@ main() {
     log_info "対象期間: ${start_date} から ${end_date}"
     
     # バトルログを取得
-    # log_info "バトルログを取得しています"
-    # if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.fetch_battlelog; then
-    #     log_error "バトルログの取得に失敗しました"
-    #     exit 1
-    # fi
+    log_info "バトルログを取得しています"
+    if ! /Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/venv/bin/python -m src.fetch_battlelog; then
+        log_error "バトルログの取得に失敗しました"
+        exit 1
+    fi
 
     # 勝率データを出力
     log_info "統計データをまとめてエクスポートしています"
