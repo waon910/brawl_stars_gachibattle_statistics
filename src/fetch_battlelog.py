@@ -19,7 +19,7 @@ from .db import get_connection
 from .map import MAP_NAME_TO_ID
 from .rank import RANK_TO_ID
 from .logging_config import setup_logging
-from .settings import DATA_RETENTION_DAYS, load_environment
+from .settings import DATA_RETENTION_DAYS, MIN_RANK_ID, load_environment
 
 # リクエスト間隔（秒）
 REQUEST_INTERVAL = 0.01
@@ -29,6 +29,8 @@ MAX_RETRIES = 3
 ACQ_CYCLE_TIME = 6
 # トロフィー境界
 TROPHIE_BORDER = 5000
+# DB に登録する最低ランク（これ未満は保存しない）
+MIN_REGISTER_RANK = 13
 # 一度に取得するプレイヤー数
 FETCH_BATCH_SIZE = 10
 # 並列取得時の最大ワーカー数
@@ -191,8 +193,18 @@ def request_with_retry(
 
 
 def cleanup_old_logs(conn) -> int:
-    """設定された日数より前のログデータを削除"""
+    """設定された日数より前のログデータと低ランク(rank_id<=4)のログを削除"""
     cur = conn.cursor()
+    # 低ランクの履歴は保持対象外のため無条件に削除する
+    cur.execute(
+        """
+        SELECT id
+        FROM rank_logs
+        WHERE rank_id < %s
+        """,
+        (MIN_RANK_ID,),
+    )
+    low_rank_ids = [row[0] for row in cur.fetchall()]
     threshold = (datetime.now(JST) - timedelta(days=DATA_RETENTION_DAYS)).strftime("%Y%m%d")
     cur.execute(
         """
@@ -217,11 +229,12 @@ def cleanup_old_logs(conn) -> int:
         (threshold,),
     )
     old_rank_ids = [row[0] for row in cur.fetchall()]
-    if not old_rank_ids:
+    rank_ids_to_delete = list(set(low_rank_ids) | set(old_rank_ids))
+    if not rank_ids_to_delete:
         return 0
     deleted = 0
-    for start in range(0, len(old_rank_ids), DELETE_CHUNK_SIZE):
-        chunk = old_rank_ids[start : start + DELETE_CHUNK_SIZE]
+    for start in range(0, len(rank_ids_to_delete), DELETE_CHUNK_SIZE):
+        chunk = rank_ids_to_delete[start : start + DELETE_CHUNK_SIZE]
         placeholders = ",".join("%s" for _ in chunk)
         cur.execute(
             f"DELETE FROM win_lose_logs WHERE battle_log_id IN (SELECT id FROM battle_logs WHERE rank_log_id IN ({placeholders}))",
@@ -388,6 +401,8 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
             )
             if star_player_tag:
                 new_rank_flag = True
+                # ランクマッチ(または同一グループ)開始時にランクをリセット
+                rank = 0
                 rank_log_id = f"{battle_time}_{star_player_tag}"
                 # ここですでに存在しているランクマッチを確認
                 cur.execute(
@@ -456,6 +471,19 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                 # まだ埋まっていない場合のみ上書き
                 if getattr(resultInfo[other], "result", "不明") in (None, "", "不明"):
                     resultInfo[other].result = OPPOSITE[result]
+
+            # ランクが低い履歴は登録しない
+            if rank < MIN_REGISTER_RANK:
+                logger.debug(
+                    "ランク%d未満(%d)のため登録スキップ rank_log_id=%s",
+                    MIN_REGISTER_RANK,
+                    rank,
+                    rank_log_id,
+                )
+                new_rank_flag = False
+                new_rank_brawlers_flag = False
+                rank_log_id = None
+                continue
 
             if new_rank_brawlers_flag:
                 map_id = MAP_NAME_TO_ID.get(battle_map)

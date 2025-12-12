@@ -10,20 +10,20 @@
 --     p.highest_rank
 
 -- 修正後のクエリ
--- SELECT
---     p.current_rank,
---     COUNT(p.tag) AS player_count
--- FROM
---     players AS p
--- GROUP BY
---     p.current_rank
--- ORDER BY
---     p.current_rank;
-
 SELECT
-    *
+    p.current_rank,
+    COUNT(p.tag) AS player_count
 FROM
-    players
-WHERE
-    current_rank = 22;
+    players AS p
+GROUP BY
+    p.current_rank
+ORDER BY
+    p.current_rank;
+
+-- SELECT
+--     *
+-- FROM
+--     players
+-- WHERE
+--     current_rank = 22;
 

@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = BASE_DIR / "config" / "settings.env"
 LOCAL_ENV_FILE = BASE_DIR / ".env.local"
-_DEFAULT_RETENTION_DAYS = 30
-_DEFAULT_MIN_RANK_ID = 4
+_DEFAULT_RETENTION_DAYS = 20
+_DEFAULT_MIN_RANK_ID = 5
 _DEFAULT_CONFIDENCE_LEVEL = 0.95
 
 
