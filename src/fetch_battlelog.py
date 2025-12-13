@@ -1,3 +1,4 @@
+import argparse
 import json
 import logging
 import os
@@ -26,7 +27,7 @@ REQUEST_INTERVAL = 0.01
 # 最大リトライ回数
 MAX_RETRIES = 3
 # 取得サイクル時間
-ACQ_CYCLE_TIME = 6
+DEFAULT_ACQ_CYCLE_HOURS = 6
 # トロフィー境界
 TROPHIE_BORDER = 5000
 # DB に登録する最低ランク（これ未満は保存しない）
@@ -252,6 +253,23 @@ def cleanup_old_logs(conn) -> int:
     conn.commit()
     return deleted
 
+def _build_player_filter_clause(
+    min_current_rank: Optional[int],
+    min_highest_rank: Optional[int],
+) -> tuple[str, list[int]]:
+    """上位プレイヤー向けの WHERE 句を生成する"""
+    filters: list[str] = []
+    params: list[int] = []
+    if min_current_rank is not None:
+        filters.append("current_rank >= %s")
+        params.append(min_current_rank)
+    if min_highest_rank is not None:
+        filters.append("highest_rank >= %s")
+        params.append(min_highest_rank)
+    if not filters:
+        return "", []
+    return f" AND ({' OR '.join(filters)})", params
+
 def fetch_rank_player(api_key: str, conn) -> int:
     """ランク上位プレイヤーを取得してDBへ保存"""
     cur = conn.cursor()
@@ -441,7 +459,7 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
                         #     cur.execute("DELETE FROM players WHERE tag=%s", (player_tag,))
                         #     if cur.rowcount == 1:  # 削除されたら1、既に存在しなかったら0
                         #         logger.info("プレイヤー削除:%s", player_tag)
-                    if p_tag and 15 < trophies <= 22:
+                    if p_tag and 16 < trophies <= 22:
                         cur.execute("INSERT IGNORE INTO players(tag) VALUES (%s)", (p_tag,))
                         if cur.rowcount == 1:  # 挿入されたら1、既存で無視されたら0
                             new_players += 1
@@ -576,8 +594,35 @@ def fetch_battle_logs(player_tag: str, api_key: str) -> tuple[int, int, int]:
         return (new_players, new_rank_logs, new_battle_logs)
             
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fetch Brawl Stars rank battle logs",
+    )
+    parser.add_argument(
+        "--acq-cycle-hours",
+        type=float,
+        default=DEFAULT_ACQ_CYCLE_HOURS,
+        help="同一プレイヤーの再取得をスキップする間隔（時間）。デフォルト: 6時間",
+    )
+    parser.add_argument(
+        "--min-current-rank",
+        type=int,
+        default=None,
+        help="現在ランクがこの値以上のプレイヤーのみを対象にする（指定しない場合は無条件）",
+    )
+    parser.add_argument(
+        "--min-highest-rank",
+        type=int,
+        default=None,
+        help="最高ランクがこの値以上のプレイヤーのみを対象にする（指定しない場合は無条件）",
+    )
+    return parser.parse_args()
+
+
+def main(args: Optional[argparse.Namespace] = None) -> None:
     setup_logging()
+
+    args = args or parse_args()
 
     load_environment()
 
@@ -600,19 +645,30 @@ def main() -> None:
             # new_players_total += fetch_rank_player(api_key, conn)
             rest = 0
 
+            last_fetch_threshold = datetime.now(JST) - timedelta(hours=args.acq_cycle_hours)
+            filter_clause, filter_params = _build_player_filter_clause(
+                args.min_current_rank, args.min_highest_rank
+            )
+            if filter_clause:
+                logger.info(
+                    "上位フィルタを適用: current_rank >= %s OR highest_rank >= %s",
+                    args.min_current_rank if args.min_current_rank is not None else "-",
+                    args.min_highest_rank if args.min_highest_rank is not None else "-",
+                )
+            logger.info("対象の再取得間隔（時間）: %s", args.acq_cycle_hours)
+
             try:
                 while 1:
                     cur = conn.cursor()
-                    seventy_two_hours_ago = datetime.now(JST) - timedelta(hours=ACQ_CYCLE_TIME)
-                    
                     cur.execute(
                         """
                         SELECT tag FROM players
                         WHERE last_fetched < %s
+                        {filter_clause}
                         ORDER BY is_monitored DESC, last_fetched ASC
                         LIMIT %s
-                        """,
-                        (seventy_two_hours_ago, FETCH_BATCH_SIZE),
+                        """.format(filter_clause=filter_clause),
+                        tuple([last_fetch_threshold, *filter_params, FETCH_BATCH_SIZE]),
                     )
                     rows = cur.fetchall()
                     tags = [r[0] for r in rows]
@@ -629,8 +685,12 @@ def main() -> None:
                             new_battle_logs_total += battles_added
 
                     cur.execute(
-                        "SELECT COUNT(*) FROM players WHERE last_fetched < %s",
-                        (seventy_two_hours_ago,),
+                        """
+                        SELECT COUNT(*) FROM players
+                        WHERE last_fetched < %s
+                        {filter_clause}
+                        """.format(filter_clause=filter_clause),
+                        tuple([last_fetch_threshold, *filter_params]),
                     )
                     rest = cur.fetchone()[0]
                     if rest == 0:

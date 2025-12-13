@@ -8,7 +8,8 @@ Brawl Stars のランク戦バトルログを継続的に収集し、MySQL デ�
 - **統計データの一括出力**: `src/export_all_stats.py` が勝率・スター取得率・対キャラ/味方相性・トリオ構成・3対3構成・監視対象プレイヤーの実績・ランクマッチ数をまとめて JSON 出力します。Beta-Binomial に基づく信頼区間計算を採用しています。
 - **個別統計スクリプト**: `src/export_win_rates.py` や `src/export_pair_stats.py` など、特定の分析指標のみを抽出する専用スクリプトを提供します。
 - **監視対象プレイヤー管理**: `scripts/player_monitoring.py` により、特定プレイヤーをデータ収集の優先対象に設定・解除したり、現在の監視リストを確認できます。
-- **バッチ実行支援**: `scripts/run_pipeline.sh` が収集〜統計出力〜成果物コピー〜Git 操作までを一貫して実行し、ログ出力や重複起動の抑止、実行時間の計測を行います。`scripts/setup_cron.sh` を使えば cron ジョブのひな型を作成できます。
+- **バッチ実行支援**: `scripts/run_pipeline.sh` が収集〜統計出力〜成果物コピー〜Git 操作までを一貫して実行し、ログ出力や重複起動の抑止、実行時間の計測を行います。12時間ごとなど長周期の定期実行に使います。
+- **上位帯の短周期収集**: `scripts/run_high_rank_fetch.sh` が上位プレイヤー（現在ランク18以上または最高ランク21以上）だけを2時間間隔で収集します。統計出力は行わず、頻繁なバトルログ更新に追随するための補助ジョブです。
 - **設定/ログ管理**: `config/settings.env` と `.env.local` による環境変数管理、`config/logging.yaml` による Python ログ設定を用意しています。
 
 ## 前提条件
@@ -67,6 +68,22 @@ mysql -u root -p brawl_stats < sql/insert_master.sql
 ```
 
 ログは `data/logs` 配下にタイムスタンプ付きで出力されます。保持期間は `DATA_RETENTION_DAYS` に従って自動的に管理されます。
+
+### 上位帯プレイヤーのみを2時間おきに収集するジョブ
+
+上位帯プレイヤーはバトルログが流れるのが早いため、12時間サイクルとは別に高頻度で取得します。統計出力は行わず、データベースへのバトルログ蓄積のみを実行します。
+
+```bash
+# 上位帯（current_rank >= 18 または highest_rank >= 21）を対象に2時間周期で取得
+./scripts/run_high_rank_fetch.sh
+```
+
+cron に登録する例（メインのパイプラインは 0:10/12:10、上位帯収集は2時間おきの40分に実行する想定）:
+
+```cron
+10 0,12 * * * cd "/Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/scripts" && TZ=Asia/Tokyo "/Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/scripts/run_pipeline.sh" >/dev/null 2>&1
+40 */2 * * * cd "/Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/scripts" && TZ=Asia/Tokyo "/Users/shunsukeiwao/develop/brawl_stars_gachibattle_statistics/scripts/run_high_rank_fetch.sh" >/dev/null 2>&1
+```
 
 ## 個別の統計出力スクリプト
 
